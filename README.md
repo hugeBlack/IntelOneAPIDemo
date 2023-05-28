@@ -1,0 +1,2 @@
+# IntelOneAPIDemo
+本仓库实现了使用Intel OneAPI所提供的Pytorch扩展来实现加速AI训练的演示
