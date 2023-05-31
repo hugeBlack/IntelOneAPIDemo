@@ -31,13 +31,6 @@ oneAPI 行业计划鼓励生态系统内基于oneAPI规范的合作以及兼容 
 pip install matplotlib gymnasium torch intel_extension_for_pytorch
 ```
 
-## 运行
-
-本项目不需要额外配置，直接运行python文件即可。
-```shell
-python dqn.py
-```
-
 ## 使用XPU加速运算
 
 ```python
@@ -46,6 +39,13 @@ import intel_extension_for_pytorch as ipex
 
 # 选择xpu作为torch运算硬件
 device = torch.device("xpu")
+```
+
+## 运行
+
+本项目不需要额外配置，直接运行python文件即可。
+```shell
+python dqn.py
 ```
 
 运行时，会显示matplot的图表，显示在一个episode中坚持了多少个step
