@@ -1,68 +1,3 @@
-# Intel® oneAPI简介
-
-Intel oneAPI 是一个跨行业、开放、基于标准的统一的编程模型，它为跨 CPU、GPU、FPGA、专用加速器的开发者提供统一的体验。
-
-它由一项行业计划和一款英特尔beta产品组成。
-
-oneAPI 开放规范基于行业标准和现有开发者编程模型，广泛适用于不同架构和来自不同供应商的硬件。
-
-oneAPI 行业计划鼓励生态系统内基于oneAPI规范的合作以及兼容 oneAPI的实践。
-
-通过oneAPI，我们可以最大程度地忽略硬件之间的差异，而使用统一的编程模型编写程序，有效地提高我们的开发效率
-
-# 基于Intel® oneAPI 的 Deep Q-Learning 算法实现
-
-## 简介
-
-我们可以基于oneAPI编写、训练、使用神经网络，下方的代码展示了如何使用Intel® oneAPI的pytorch extension编写并训练一个 Deep Q-Learning 网络
-
-本代码是DQN算法的一个简单实现，实现了使用DQN算法训练智能体玩CartPole游戏的代码。
-
-## Intel®Extension for PyTorch
-
-该拓展包拓展了pytorch所支持的硬件设备，不再拘泥于CUDA或CPU运行。其利用了英特尔CPU上的AVX-512矢量神经网络指令（AVX512 VNNI）和英特尔Xe高级矩阵扩展，以及英特尔GPU上的Xe矩阵扩展（XMX）AI引擎对AI训练进行加速。
-
-## 依赖
-
-本项目需要intel pytorch extension、pytorch、matplotlib、gymnasium等库才能运行。
-
-安装：
-```shell
-pip install matplotlib gymnasium torch intel_extension_for_pytorch
-```
-
-## 运行
-
-本项目不需要额外配置，直接运行python文件即可。
-```shell
-python dqn.py
-```
-
-## 使用XPU加速运算
-
-```python
-# 引入oneAPI中的Intel Extension for Pytorch
-import intel_extension_for_pytorch as ipex
-
-# 选择xpu作为torch运算硬件
-device = torch.device("xpu")
-```
-
-运行时，会显示matplot的图表，显示在一个episode中坚持了多少个step
-
-控制台中会显示当前episode的结果。
-
-## 实验结果
-
-实验结果如图所示：
-
-![image](/Figure_1.png)
-
-可以发现，AI很好地掌握了杆平衡的方法，通过Intel® oneAPI训练所需的时间也较纯CPU训练短。
-
-## 完整代码
-
-```python
 import gymnasium as gym
 import random
 import matplotlib
@@ -256,5 +191,3 @@ if __name__ == "__main__":
 plot_durations(show_result=True)
 plt.ioff()
 plt.show()
-
-```
