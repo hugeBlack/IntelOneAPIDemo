@@ -240,8 +240,7 @@ static NSArray<NSString *> *NJSponsorBlockDefaultCategories(void) {
 }
 
 - (NSArray<NJSponsorBlockSegment *> *)cachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid {
-    NJSponsorBlockCacheItem *item = nil;
-//    NJSponsorBlockCacheItem *item = (NJSponsorBlockCacheItem *)[[NJSettingCache sharedInstance].cache objectForKey:[self cacheKeyWithVideoID:videoID cid:cid]];
+    NJSponsorBlockCacheItem *item = (NJSponsorBlockCacheItem *)[NJ_SETTING_CACHE objectForKey:[self cacheKeyWithVideoID:videoID cid:cid]];
     if (![item isKindOfClass:[NJSponsorBlockCacheItem class]]) {
         return nil;
     }
@@ -255,7 +254,7 @@ static NSArray<NSString *> *NJSponsorBlockDefaultCategories(void) {
     NJSponsorBlockCacheItem *item = [[NJSponsorBlockCacheItem alloc] init];
     item.segments = segments ?: @[];
     item.date = [NSDate date];
-//    [[NJSettingCache sharedInstance].cache setObject:item forKey:[self cacheKeyWithVideoID:videoID cid:cid] withBlock:nil];
+    [NJ_SETTING_CACHE setObject:item forKey:[self cacheKeyWithVideoID:videoID cid:cid] withBlock:nil];
 }
 
 - (NSString *)cacheKeyWithVideoID:(NSString *)videoID cid:(NSInteger)cid {

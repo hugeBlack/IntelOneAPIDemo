@@ -5,6 +5,7 @@
 
 #import "NJSponsorBlockPanelView.h"
 #import "NJCommonDefine.h"
+#import "NJSettingCache.h"
 #import "NJSponsorBlockManager.h"
 #import "NJSponsorBlockSegment.h"
 #import <objc/runtime.h>
@@ -680,7 +681,7 @@ static void *NJSponsorBlockNativeTimelineKey = &NJSponsorBlockNativeTimelineKey;
 
 - (void)toggleEnabled {
     BOOL next = !NJ_SPONSOR_BLOCK_VALUE;
-//    [NJ_SETTING_CACHE setObject:@(next) forKey:NJ_SPONSOR_BLOCK_KEY withBlock:nil];
+    [NJ_SETTING_CACHE setObject:@(next) forKey:NJ_SPONSOR_BLOCK_KEY withBlock:nil];
     [self refreshContent];
 }
 
