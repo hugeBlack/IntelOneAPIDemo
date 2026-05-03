@@ -221,7 +221,7 @@ void (*orig_BBPlayerControlContainerWidgetView_layoutSubviews)(id self, SEL sel)
 void hook_BBPlayerControlContainerWidgetView_layoutSubviews(id self, SEL sel) {
     orig_BBPlayerControlContainerWidgetView_layoutSubviews(self, sel);
     UIView *controlContainer = (UIView *)self;
-    dispatch_time_t delay = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC));
+    dispatch_time_t delay = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC));
 
     dispatch_after(delay, dispatch_get_main_queue(), ^{
         NJSponsorBlockInstallDirectTopEntryFromControlContainer(controlContainer);

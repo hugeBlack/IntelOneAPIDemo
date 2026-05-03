@@ -19,6 +19,7 @@ static BOOL NJSponsorBlockClockHooksInstalled;
 static BOOL NJSponsorBlockPlaybackHookInstalled;
 static BOOL NJSponsorBlockIJKHooksInstalled;
 static BOOL NJSponsorBlockPlayerItemHookInstalled;
+static NSTimeInterval NJSponsorBlockLastPlaybackPosition = -1;
 static void NJSponsorBlockCaptureIJKPlayer(id player);
 static void NJSponsorBlockCaptureSeekObject(id object);
 static void NJSponsorBlockCaptureIJKPlayerFromObject(id object);
@@ -455,28 +456,80 @@ static BOOL NJSponsorBlockSeekCurrentPlayerToTime(NSTimeInterval time) {
 
 static void NJSponsorBlockHandlePlaybackTime(NSTimeInterval position) {
     NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    BOOL movedBySeek = NJSponsorBlockLastPlaybackPosition >= 0 && fabs(position - NJSponsorBlockLastPlaybackPosition) > 2.0;
+    NJSponsorBlockLastPlaybackPosition = position;
+
     [manager handlePlaybackTimeForProbe:position];
-    
+
     if ([manager isInCooldown]) {
         return;
     }
-    
-    NJSponsorBlockSegment *segment = [manager activeSegmentAtPlaybackTime:position];
-    if (!segment || [manager hasSkippedSegment:segment]) {
+
+    NSArray<NJSponsorBlockSegment *> *segments = [manager autoSkipSegmentsAtPlaybackTime:position];
+    NJSponsorBlockSegment *segment = segments.lastObject;
+    if (!segment) {
         return;
     }
-    
-    NSTimeInterval targetTime = segment.endTime + 0.15;
+
+    if (movedBySeek && ![manager skipOnSeekToSegment]) {
+        NSLog(@"[NJSponsorBlock] ignore seek into segment %@ %.2f-%.2f", segment.uuid, segment.startTime, segment.endTime);
+        for (NJSponsorBlockSegment *skippedSegment in segments) {
+            [manager markSegmentSkipped:skippedSegment];
+        }
+        return;
+    }
+
+    NSTimeInterval targetTime = segment.endTime;
     if (segment.videoDuration > 0 && targetTime > segment.videoDuration - 2.0) {
         NSLog(@"[NJSponsorBlock] ignore segment near video end %@ %.2f-%.2f", segment.uuid, segment.startTime, segment.endTime);
-        [manager markSegmentSkipped:segment];
+        for (NJSponsorBlockSegment *skippedSegment in segments) {
+            [manager markSegmentSkipped:skippedSegment];
+        }
         return;
     }
-    
+
     if (NJSponsorBlockSeekCurrentPlayerToTime(targetTime)) {
-        [manager markSegmentSkipped:segment];
+        for (NJSponsorBlockSegment *skippedSegment in segments) {
+            [manager markSegmentSkipped:skippedSegment];
+            [manager reportSegmentSkipped:skippedSegment];
+            [manager recordLastSkippedSegment:skippedSegment];
+        }
         [manager enterCooldown];
         NSLog(@"[NJSponsorBlock] skipped %@ %.2f-%.2f target=%.2f", segment.uuid, segment.startTime, segment.endTime, targetTime);
+    }
+}
+
+static void NJSponsorBlockHandleManualSkipRequest(NSNotification *notification) {
+    NJSponsorBlockSegment *segment = [notification.object isKindOfClass:[NJSponsorBlockSegment class]] ? notification.object : nil;
+    if (!segment) {
+        return;
+    }
+
+    NSTimeInterval targetTime = [segment.actionType isEqualToString:@"poi"] ? segment.startTime : segment.endTime;
+    if (NJSponsorBlockSeekCurrentPlayerToTime(targetTime)) {
+        NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+        [manager markSegmentSkipped:segment];
+        [manager reportSegmentSkipped:segment];
+        [manager recordLastSkippedSegment:segment];
+        [manager enterCooldown];
+        NSLog(@"[NJSponsorBlock] manually skipped %@ %.2f-%.2f target=%.2f", segment.uuid, segment.startTime, segment.endTime, targetTime);
+    }
+}
+
+static void NJSponsorBlockHandleSeekRequest(NSNotification *notification) {
+    NSNumber *timeNumber = [notification.object isKindOfClass:[NSNumber class]] ? notification.object : nil;
+    if (!timeNumber) {
+        return;
+    }
+
+    NSTimeInterval targetTime = timeNumber.doubleValue;
+    if (targetTime < 0 || isnan(targetTime) || isinf(targetTime)) {
+        return;
+    }
+
+    if (NJSponsorBlockSeekCurrentPlayerToTime(targetTime)) {
+        [[NJSponsorBlockManager sharedInstance] enterCooldown];
+        NSLog(@"[NJSponsorBlock] seek requested target=%.2f", targetTime);
     }
 }
 
@@ -631,5 +684,17 @@ __attribute__((constructor)) static void NJSponsorBlockPlaybackHookInit(void) {
                                                        queue:[NSOperationQueue mainQueue]
                                                   usingBlock:^(__unused NSNotification *note) {
         NJSponsorBlockInstallRuntimeHooks();
+    }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:NJSponsorBlockManualSkipRequestNotification
+                                                      object:nil
+                                                       queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(NSNotification *note) {
+        NJSponsorBlockHandleManualSkipRequest(note);
+    }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:NJSponsorBlockSeekRequestNotification
+                                                      object:nil
+                                                       queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(NSNotification *note) {
+        NJSponsorBlockHandleSeekRequest(note);
     }];
 }
