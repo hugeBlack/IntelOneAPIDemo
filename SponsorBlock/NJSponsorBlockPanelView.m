@@ -50,7 +50,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 
 @end
 
-@interface NJSponsorBlockPanelView ()
+@interface NJSponsorBlockPanelView () <UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong) UIStackView *headerStack;
 @property (nonatomic, strong) UIStackView *footerStack;
@@ -787,6 +787,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self addSubview:self.footerStack];
 
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    pan.delegate = self;
     [self addGestureRecognizer:pan];
 
     self.noticeHeightConstraint = [self.noticeView.heightAnchor constraintEqualToConstant:0];
@@ -1535,6 +1536,13 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockSeekRequestNotification object:@(segment.startTime)];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    if ([touch.view isKindOfClass:[UIControl class]]) {
+        return NO;
+    }
+    return YES;
 }
 
 - (void)handlePan:(UIPanGestureRecognizer *)pan {
