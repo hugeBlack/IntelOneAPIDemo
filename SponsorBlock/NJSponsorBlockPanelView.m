@@ -275,10 +275,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         button = [UIButton buttonWithType:UIButtonTypeCustom];
         button.frame = CGRectMake(0, 0, 38, 38);
         button.accessibilityIdentifier = @"NJSponsorBlockEntryButton";
-        button.backgroundColor = [UIColor colorWithWhite:0 alpha:0.36];
-        button.layer.cornerRadius = 19;
-        button.layer.borderWidth = 1;
-        button.layer.borderColor = [UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:0.95].CGColor;
+//        button.backgroundColor = [UIColor colorWithWhite:0 alpha:0.36];
+//        button.layer.cornerRadius = 19;
+//        button.layer.borderWidth = 1;
+//        button.layer.borderColor = [UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:0.95].CGColor;
         button.titleLabel.font = [UIFont boldSystemFontOfSize:23];
         [button setTitle:@"▷" forState:UIControlStateNormal];
         [button setTitleColor:[UIColor colorWithRed:0.02 green:0.78 blue:1 alpha:1] forState:UIControlStateNormal];
@@ -298,84 +298,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         view.layer.masksToBounds = YES;
     });
     return view;
-}
-
-+ (void)installEntryInView:(UIView *)view {
-    if (!NJ_MASTER_SWITCH_VALUE) {
-        return;
-    }
-    UIView *hostView = [self overlayHostView] ?: view;
-    if (!hostView) {
-        return;
-    }
-    [self markPlaybackActive];
-
-    UIButton *button = [self sharedEntryButton];
-    if (button.superview != hostView) {
-        [button removeFromSuperview];
-        [hostView addSubview:button];
-        NSLog(@"[NJSponsorBlock] overlay entry installed in %@", hostView);
-    }
-    [hostView bringSubviewToFront:button];
-    [self layoutEntryButton:button inView:hostView];
-    [self installTimelineInView:hostView];
-    [self refresh];
-}
-
-+ (void)installEntryDirectlyInContainer:(UIView *)container {
-    if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self installEntryDirectlyInContainer:container];
-        });
-        return;
-    }
-
-    if (!container || !NJ_MASTER_SWITCH_VALUE || !container.window) {
-        return;
-    }
-    
-    CGFloat origWidth = container.frame.size.width;
-
-    [self markPlaybackActive];
-
-    UIView *hostView = container;
-    if (!hostView || !hostView.window) {
-        return;
-    }
-    
-    UIButton *button = [self sharedEntryButton];
-    if (button.superview != hostView) {
-        [button removeFromSuperview];
-        [hostView insertSubview:button atIndex:1];
-        NSLog(@"[NJSponsorBlock] entry installed as sibling near %@ host=%@ containerFrame=%@ hostBounds=%@",
-              container,
-              hostView,
-              NSStringFromCGRect([container convertRect:container.bounds toView:hostView]),
-              NSStringFromCGRect(hostView.bounds));
-    }
-
-    hostView.clipsToBounds = NO;
-
-    [hostView bringSubviewToFront:button];
-    
-    button.frame = CGRectMake(origWidth - 41, 3, 38, 38);
-    
-    [self refresh];
-}
-
-+ (void)installEntryBesideButtonGroup:(UIView *)buttonGroup {
-    [self installEntryDirectlyInContainer:buttonGroup];
-}
-
-+ (void)setEntryAnchorView:(UIView *)view {
-    if (!view || view.hidden || view.alpha <= 0.01 || !view.window) {
-        return;
-    }
-    if (NJSponsorBlockEntryAnchorView == view) {
-        return;
-    }
-    NJSponsorBlockEntryAnchorView = view;
-    NSLog(@"[NJSponsorBlock] entry anchor updated %@ frame=%@", view, NSStringFromCGRect(view.frame));
 }
 
 + (void)installTimelineInView:(UIView *)view {
