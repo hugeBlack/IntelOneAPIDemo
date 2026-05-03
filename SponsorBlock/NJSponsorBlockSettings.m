@@ -18,6 +18,7 @@ static NSString * const NJSponsorBlockMinDurationKey = @"NJSponsorBlockMinDurati
 static NSString * const NJSponsorBlockAdvanceNoticeDurationKey = @"NJSponsorBlockAdvanceNoticeDurationKey";
 static NSString * const NJSponsorBlockServerBaseURLKey = @"NJSponsorBlockServerBaseURLKey";
 static NSString * const NJSponsorBlockCategoryActionsKey = @"NJSponsorBlockCategoryActionsKey";
+static NSString * const NJSponsorBlockCategoryColorsKey = @"NJSponsorBlockCategoryColorsKey";
 
 static NSString * const NJSponsorBlockDefaultServerBaseURLString = @"https://bsbsb.top";
 static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.0.0.1:9876";
@@ -254,6 +255,84 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     }
     NSTimeInterval minDuration = [self minDuration];
     return minDuration <= 0 || segment.endTime - segment.startTime >= minDuration;
+}
+
+#pragma mark - Category Colors
+
++ (NSString *)hexStringFromColor:(UIColor *)color {
+    CGFloat r = 0, g = 0, b = 0, a = 0;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    return [NSString stringWithFormat:@"#%02X%02X%02X",
+            (int)(r * 255), (int)(g * 255), (int)(b * 255)];
+}
+
++ (UIColor *)colorFromHexString:(NSString *)hex {
+    if (![hex hasPrefix:@"#"] || hex.length != 7) {
+        return nil;
+    }
+    unsigned int rgb = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:[hex substringFromIndex:1]];
+    if (![scanner scanHexInt:&rgb]) {
+        return nil;
+    }
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
+}
+
++ (UIColor *)defaultColorForCategory:(NSString *)category {
+    if ([category isEqualToString:@"sponsor"]) {
+        return [UIColor colorWithRed:0 green:0.90 blue:0.10 alpha:1.0];
+    }
+    if ([category isEqualToString:@"intro"]) {
+        return [UIColor cyanColor];
+    }
+    if ([category isEqualToString:@"outro"]) {
+        return [UIColor colorWithRed:0.92 green:0.40 blue:0.95 alpha:1.0];
+    }
+    if ([category isEqualToString:@"selfpromo"]) {
+        return [UIColor colorWithRed:1.00 green:0.65 blue:0.10 alpha:1.0];
+    }
+    if ([category isEqualToString:@"preview"] || [category isEqualToString:@"poi_highlight"] || [category isEqualToString:@"exclusive_access"]) {
+        return [UIColor colorWithRed:1.00 green:0.86 blue:0.18 alpha:1.0];
+    }
+    if ([category isEqualToString:@"filler"] || [category isEqualToString:@"music_offtopic"]) {
+        return [UIColor colorWithRed:0.55 green:0.72 blue:1.00 alpha:1.0];
+    }
+    return [UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:1.0];
+}
+
++ (UIColor *)colorForCategory:(NSString *)category {
+    NSDictionary *colors = [self categoryColors];
+    NSString *hex = colors[category];
+    if (hex) {
+        UIColor *color = [self colorFromHexString:hex];
+        if (color) {
+            return color;
+        }
+    }
+    return [self defaultColorForCategory:category];
+}
+
++ (void)setColor:(UIColor *)color forCategory:(NSString *)category {
+    if (category.length == 0 || !color) {
+        return;
+    }
+    NSMutableDictionary *colors = [[self categoryColors] mutableCopy];
+    colors[category] = [self hexStringFromColor:color];
+    [NJ_SETTING_CACHE setObject:[colors copy] forKey:NJSponsorBlockCategoryColorsKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (void)resetColors {
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockCategoryColorsKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (NSDictionary<NSString *, NSString *> *)categoryColors {
+    id colors = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockCategoryColorsKey];
+    return [colors isKindOfClass:[NSDictionary class]] ? colors : @{};
 }
 
 @end

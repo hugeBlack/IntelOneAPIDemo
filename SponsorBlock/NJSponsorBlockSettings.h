@@ -4,6 +4,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 @class NJSponsorBlockSegment;
 
@@ -51,6 +52,11 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockCategoryAction) {
 + (BOOL)shouldShowSegment:(NJSponsorBlockSegment *)segment;
 + (BOOL)shouldAutoSkipSegment:(NJSponsorBlockSegment *)segment;
 + (BOOL)shouldManualSkipSegment:(NJSponsorBlockSegment *)segment;
++ (UIColor *)colorForCategory:(NSString *)category;
++ (void)setColor:(UIColor *)color forCategory:(NSString *)category;
++ (UIColor *)defaultColorForCategory:(NSString *)category;
++ (void)resetColors;
+
 + (NSString *)requestConfigurationIdentifier;
 + (void)postSettingsDidChangeNotification;
 

@@ -5,6 +5,7 @@
 
 #import "NJSponsorBlockSettingViewController.h"
 #import "NJSponsorBlockSettings.h"
+#import "NJSponsorBlockColorPickerController.h"
 
 static NSString * const NJSponsorBlockSettingCellID = @"NJSponsorBlockSettingCellID";
 
@@ -12,10 +13,15 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     NJSponsorBlockSettingSectionGeneral = 0,
     NJSponsorBlockSettingSectionBehavior,
     NJSponsorBlockSettingSectionCategories,
+    NJSponsorBlockSettingSectionColors,
     NJSponsorBlockSettingSectionServer,
     NJSponsorBlockSettingSectionAbout,
     NJSponsorBlockSettingSectionCount,
 };
+
+@interface NJSponsorBlockSettingViewController () <NJSponsorBlockColorPickerDelegate>
+@property (nonatomic, copy) NSString *editingColorCategory;
+@end
 
 @implementation NJSponsorBlockSettingViewController
 
@@ -43,6 +49,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return 3;
         case NJSponsorBlockSettingSectionCategories:
             return [NJSponsorBlockSettings categoryOptions].count;
+        case NJSponsorBlockSettingSectionColors:
+            return [NJSponsorBlockSettings categoryOptions].count;
         case NJSponsorBlockSettingSectionServer:
             return 2;
         case NJSponsorBlockSettingSectionAbout:
@@ -60,6 +68,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return @"跳过行为";
         case NJSponsorBlockSettingSectionCategories:
             return @"分类行为";
+        case NJSponsorBlockSettingSectionColors:
+            return @"行为颜色";
         case NJSponsorBlockSettingSectionServer:
             return @"服务器";
         case NJSponsorBlockSettingSectionAbout:
@@ -74,6 +84,31 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         return @"当前 iOS 客户端支持官方插件的播放跳过、分类行为、服务器、缓存配置和基础片段投稿。投稿为移动端简化流程，不包含浏览器扩展的完整编辑器、快捷键、动态/评论屏蔽、缩略图标签等功能。";
     }
     return nil;
+}
+
+- (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
+    if (section != NJSponsorBlockSettingSectionColors) {
+        return nil;
+    }
+    UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 44)];
+    UIButton *resetButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [resetButton setTitle:@"恢复默认颜色" forState:UIControlStateNormal];
+    resetButton.titleLabel.font = [UIFont systemFontOfSize:15];
+    [resetButton addTarget:self action:@selector(resetColorsTapped) forControlEvents:UIControlEventTouchUpInside];
+    resetButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [footer addSubview:resetButton];
+    [NSLayoutConstraint activateConstraints:@[
+        [resetButton.centerXAnchor constraintEqualToAnchor:footer.centerXAnchor],
+        [resetButton.centerYAnchor constraintEqualToAnchor:footer.centerYAnchor],
+    ]];
+    return footer;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
+    if (section == NJSponsorBlockSettingSectionColors) {
+        return 44;
+    }
+    return UITableViewAutomaticDimension;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -94,6 +129,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             break;
         case NJSponsorBlockSettingSectionCategories:
             [self configureCategoryCell:cell row:indexPath.row];
+            break;
+        case NJSponsorBlockSettingSectionColors:
+            [self configureColorCell:cell row:indexPath.row];
             break;
         case NJSponsorBlockSettingSectionServer:
             [self configureServerCell:cell row:indexPath.row];
@@ -147,6 +185,25 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 }
 
+- (void)configureColorCell:(UITableViewCell *)cell row:(NSInteger)row {
+    NJSponsorBlockCategoryOption *option = [NJSponsorBlockSettings categoryOptions][row];
+    UIColor *color = [NJSponsorBlockSettings colorForCategory:option.category];
+    cell.textLabel.text = option.title;
+    cell.imageView.image = [self circleImageWithColor:color size:22];
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+}
+
+- (UIImage *)circleImageWithColor:(UIColor *)color size:(CGFloat)size {
+    CGSize imageSize = CGSizeMake(size, size);
+    UIGraphicsBeginImageContextWithOptions(imageSize, NO, 0);
+    CGContextRef ctx = UIGraphicsGetCurrentContext();
+    CGContextSetFillColorWithColor(ctx, color.CGColor);
+    CGContextFillEllipseInRect(ctx, CGRectMake(0, 0, size, size));
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+
 - (void)configureServerCell:(UITableViewCell *)cell row:(NSInteger)row {
     if (row == 0) {
         cell.textLabel.text = @"服务器地址";
@@ -196,6 +253,10 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     }
     if (indexPath.section == NJSponsorBlockSettingSectionCategories) {
         [self presentCategoryActionSheetForRow:indexPath.row sourceCell:[tableView cellForRowAtIndexPath:indexPath]];
+        return;
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionColors) {
+        [self presentColorPickerForRow:indexPath.row sourceCell:[tableView cellForRowAtIndexPath:indexPath]];
         return;
     }
     if (indexPath.section == NJSponsorBlockSettingSectionServer && indexPath.row == 0) {
@@ -255,6 +316,35 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     alert.popoverPresentationController.sourceView = sourceCell ?: self.view;
     alert.popoverPresentationController.sourceRect = sourceCell ? sourceCell.bounds : self.view.bounds;
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentColorPickerForRow:(NSInteger)row sourceCell:(UITableViewCell *)sourceCell {
+    NJSponsorBlockCategoryOption *option = [NJSponsorBlockSettings categoryOptions][row];
+    self.editingColorCategory = option.category;
+    UIColor *currentColor = [NJSponsorBlockSettings colorForCategory:option.category];
+    NJSponsorBlockColorPickerController *picker = [[NJSponsorBlockColorPickerController alloc] initWithColor:currentColor categoryTitle:option.title];
+    picker.delegate = self;
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:picker];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)colorPickerDidSelectColor:(UIColor *)color {
+    if (self.editingColorCategory) {
+        [NJSponsorBlockSettings setColor:color forCategory:self.editingColorCategory];
+        [self.tableView reloadData];
+    }
+}
+
+- (void)resetColorsTapped {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"恢复默认颜色" message:@"确定将所有分类颜色恢复为默认值？" preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [NJSponsorBlockSettings resetColors];
+        [weakSelf.tableView reloadData];
+    }]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 

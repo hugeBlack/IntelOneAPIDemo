@@ -595,25 +595,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 + (UIColor *)colorForCategory:(NSString *)category {
-    if ([category isEqualToString:@"sponsor"]) {
-        return [UIColor colorWithRed:0 green:0.90 blue:0.10 alpha:0.95];
-    }
-    if ([category isEqualToString:@"intro"]) {
-        return UIColor.cyanColor;
-    }
-    if ([category isEqualToString:@"outro"]) {
-        return [UIColor colorWithRed:0.92 green:0.40 blue:0.95 alpha:0.95];
-    }
-    if ([category isEqualToString:@"selfpromo"]) {
-        return [UIColor colorWithRed:1.00 green:0.65 blue:0.10 alpha:0.95];
-    }
-    if ([category isEqualToString:@"preview"] || [category isEqualToString:@"poi_highlight"] || [category isEqualToString:@"exclusive_access"]) {
-        return [UIColor colorWithRed:1.00 green:0.86 blue:0.18 alpha:0.95];
-    }
-    if ([category isEqualToString:@"filler"] || [category isEqualToString:@"music_offtopic"]) {
-        return [UIColor colorWithRed:0.55 green:0.72 blue:1.00 alpha:0.95];
-    }
-    return [UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:0.95];
+    return [NJSponsorBlockSettings colorForCategory:category];
 }
 
 + (void)hidePanelOnly {
