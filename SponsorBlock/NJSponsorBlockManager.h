@@ -51,6 +51,7 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification
 - (BOOL)hasActuallySkippedSegment:(NJSponsorBlockSegment *)segment;
 - (BOOL)isInCooldown;
 - (void)enterCooldown;
+- (void)clearAllCachedSegments;
 
 @end
 

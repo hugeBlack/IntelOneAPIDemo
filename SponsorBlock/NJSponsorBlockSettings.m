@@ -19,6 +19,8 @@ static NSString * const NJSponsorBlockAdvanceNoticeDurationKey = @"NJSponsorBloc
 static NSString * const NJSponsorBlockServerBaseURLKey = @"NJSponsorBlockServerBaseURLKey";
 static NSString * const NJSponsorBlockCategoryActionsKey = @"NJSponsorBlockCategoryActionsKey";
 static NSString * const NJSponsorBlockCategoryColorsKey = @"NJSponsorBlockCategoryColorsKey";
+static NSString * const NJSponsorBlockUserIDKey = @"NJSponsorBlockVoteUserIDKey";
+static NSString * const NJSponsorBlockSkipTrackingEnabledKey = @"NJSponsorBlockSkipTrackingEnabledKey";
 
 static NSString * const NJSponsorBlockDefaultServerBaseURLString = @"https://bsbsb.top";
 static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.0.0.1:9876";
@@ -211,6 +213,119 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
 
 + (BOOL)shouldManualSkipSegment:(NJSponsorBlockSegment *)segment {
     return [self shouldShowSegment:segment] && ([self segmentUsesSeekAction:segment] || [segment.actionType isEqualToString:@"poi"]) && [self actionForCategory:segment.category] == NJSponsorBlockCategoryActionManualSkip;
+}
+
++ (NSString *)sponsorBlockUserID {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    NSString *userID = [defaults stringForKey:NJSponsorBlockUserIDKey];
+    if (userID.length > 0) {
+        return userID;
+    }
+    userID = NSUUID.UUID.UUIDString;
+    [defaults setObject:userID forKey:NJSponsorBlockUserIDKey];
+    return userID;
+}
+
++ (void)setSponsorBlockUserID:(NSString *)userID {
+    if (userID.length == 0) {
+        return;
+    }
+    [NSUserDefaults.standardUserDefaults setObject:userID forKey:NJSponsorBlockUserIDKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (BOOL)skipTrackingEnabled {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockSkipTrackingEnabledKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setSkipTrackingEnabled:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockSkipTrackingEnabledKey];
+    [self postSettingsDidChangeNotification];
+}
+
+#pragma mark - Export / Import / Reset
+
++ (NSDictionary<NSString *, id> *)exportSettings {
+    NSMutableDictionary<NSString *, id> *dict = [NSMutableDictionary dictionary];
+    dict[@"enabled"] = @([self enabled]);
+    dict[@"cacheEnabled"] = @([self cacheEnabled]);
+    dict[@"skipOnSeekToSegment"] = @([self skipOnSeekToSegment]);
+    dict[@"testingServerEnabled"] = @([self testingServerEnabled]);
+    dict[@"skipTrackingEnabled"] = @([self skipTrackingEnabled]);
+    dict[@"minDuration"] = @([self minDuration]);
+    dict[@"advanceNoticeDuration"] = @([self advanceNoticeDuration]);
+    NSString *serverURL = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockServerBaseURLKey];
+    if (serverURL) {
+        dict[@"serverBaseURL"] = serverURL;
+    }
+    dict[@"categoryActions"] = [self categoryActions];
+    dict[@"categoryColors"] = [self categoryColors];
+    dict[@"userID"] = [self sponsorBlockUserID];
+    return [dict copy];
+}
+
++ (BOOL)importSettings:(NSDictionary<NSString *, id> *)settings {
+    if (!settings) {
+        return NO;
+    }
+    if (settings[@"enabled"]) {
+        [self setEnabled:[settings[@"enabled"] boolValue]];
+    }
+    if (settings[@"cacheEnabled"]) {
+        [self setCacheEnabled:[settings[@"cacheEnabled"] boolValue]];
+    }
+    if (settings[@"skipOnSeekToSegment"]) {
+        [self setSkipOnSeekToSegment:[settings[@"skipOnSeekToSegment"] boolValue]];
+    }
+    if (settings[@"testingServerEnabled"]) {
+        [self setTestingServerEnabled:[settings[@"testingServerEnabled"] boolValue]];
+    }
+    if (settings[@"skipTrackingEnabled"]) {
+        [self setSkipTrackingEnabled:[settings[@"skipTrackingEnabled"] boolValue]];
+    }
+    if (settings[@"minDuration"]) {
+        [self setMinDuration:[settings[@"minDuration"] doubleValue]];
+    }
+    if (settings[@"advanceNoticeDuration"]) {
+        [self setAdvanceNoticeDuration:[settings[@"advanceNoticeDuration"] doubleValue]];
+    }
+    if ([settings[@"serverBaseURL"] isKindOfClass:[NSString class]]) {
+        [self setServerBaseURLString:settings[@"serverBaseURL"]];
+    }
+    if ([settings[@"categoryActions"] isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *actions = settings[@"categoryActions"];
+        for (NSString *category in actions) {
+            if ([actions[category] respondsToSelector:@selector(integerValue)]) {
+                [self setAction:(NJSponsorBlockCategoryAction)[actions[category] integerValue] forCategory:category];
+            }
+        }
+    }
+    if ([settings[@"categoryColors"] isKindOfClass:[NSDictionary class]]) {
+        [NJ_SETTING_CACHE setObject:settings[@"categoryColors"] forKey:NJSponsorBlockCategoryColorsKey];
+    }
+    if ([settings[@"userID"] isKindOfClass:[NSString class]] && [settings[@"userID"] length] > 0) {
+        [self setSponsorBlockUserID:settings[@"userID"]];
+    }
+    [self postSettingsDidChangeNotification];
+    return YES;
+}
+
++ (void)resetToDefaults {
+    NSString *userID = [self sponsorBlockUserID];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockEnabledKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockCacheEnabledKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockSkipOnSeekKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockTestingServerKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockSkipTrackingEnabledKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockMinDurationKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockAdvanceNoticeDurationKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockServerBaseURLKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockCategoryActionsKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockCategoryColorsKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJ_SPONSOR_BLOCK_KEY];
+    [self setSponsorBlockUserID:userID];
+    [self postSettingsDidChangeNotification];
 }
 
 + (NSString *)requestConfigurationIdentifier {

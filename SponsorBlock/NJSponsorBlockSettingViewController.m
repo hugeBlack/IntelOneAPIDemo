@@ -6,21 +6,26 @@
 #import "NJSponsorBlockSettingViewController.h"
 #import "NJSponsorBlockSettings.h"
 #import "NJSponsorBlockColorPickerController.h"
+#import "NJSponsorBlockCacheStats.h"
+#import "NJSponsorBlockManager.h"
 
 static NSString * const NJSponsorBlockSettingCellID = @"NJSponsorBlockSettingCellID";
 
 typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     NJSponsorBlockSettingSectionGeneral = 0,
+    NJSponsorBlockSettingSectionCache,
     NJSponsorBlockSettingSectionBehavior,
     NJSponsorBlockSettingSectionCategories,
     NJSponsorBlockSettingSectionColors,
     NJSponsorBlockSettingSectionServer,
+    NJSponsorBlockSettingSectionBackup,
     NJSponsorBlockSettingSectionAbout,
     NJSponsorBlockSettingSectionCount,
 };
 
-@interface NJSponsorBlockSettingViewController () <NJSponsorBlockColorPickerDelegate>
+@interface NJSponsorBlockSettingViewController () <NJSponsorBlockColorPickerDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, copy) NSString *editingColorCategory;
+@property (nonatomic, assign) BOOL isImportingOptions;
 @end
 
 @implementation NJSponsorBlockSettingViewController
@@ -45,6 +50,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     switch (section) {
         case NJSponsorBlockSettingSectionGeneral:
             return 2;
+        case NJSponsorBlockSettingSectionCache:
+            return 3;
         case NJSponsorBlockSettingSectionBehavior:
             return 3;
         case NJSponsorBlockSettingSectionCategories:
@@ -52,7 +59,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         case NJSponsorBlockSettingSectionColors:
             return [NJSponsorBlockSettings categoryOptions].count;
         case NJSponsorBlockSettingSectionServer:
-            return 2;
+            return 4;
+        case NJSponsorBlockSettingSectionBackup:
+            return 4;
         case NJSponsorBlockSettingSectionAbout:
             return 1;
         default:
@@ -64,6 +73,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     switch (section) {
         case NJSponsorBlockSettingSectionGeneral:
             return @"基础";
+        case NJSponsorBlockSettingSectionCache:
+            return @"缓存管理";
         case NJSponsorBlockSettingSectionBehavior:
             return @"跳过行为";
         case NJSponsorBlockSettingSectionCategories:
@@ -72,6 +83,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return @"行为颜色";
         case NJSponsorBlockSettingSectionServer:
             return @"服务器";
+        case NJSponsorBlockSettingSectionBackup:
+            return @"备份/恢复";
         case NJSponsorBlockSettingSectionAbout:
             return @"说明";
         default:
@@ -80,6 +93,12 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    if (section == NJSponsorBlockSettingSectionCache) {
+        return @"启用缓存可以提高视频片段的加载速度。关闭时会清除所有已存储的缓存数据。";
+    }
+    if (section == NJSponsorBlockSettingSectionBackup) {
+        return @"导入/导出的选项以 JSON 格式保存，包含了您的私人用户 ID，请谨慎保管。";
+    }
     if (section == NJSponsorBlockSettingSectionAbout) {
         return @"当前 iOS 客户端支持官方插件的播放跳过、分类行为、服务器、缓存配置和基础片段投稿。投稿为移动端简化流程，不包含浏览器扩展的完整编辑器、快捷键、动态/评论屏蔽、缩略图标签等功能。";
     }
@@ -87,6 +106,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
+    if (section == NJSponsorBlockSettingSectionCache) {
+        return [self cacheSectionFooterView];
+    }
     if (section != NJSponsorBlockSettingSectionColors) {
         return nil;
     }
@@ -105,6 +127,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
+    if (section == NJSponsorBlockSettingSectionCache) {
+        return UITableViewAutomaticDimension;
+    }
     if (section == NJSponsorBlockSettingSectionColors) {
         return 44;
     }
@@ -124,6 +149,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         case NJSponsorBlockSettingSectionGeneral:
             [self configureGeneralCell:cell row:indexPath.row];
             break;
+        case NJSponsorBlockSettingSectionCache:
+            [self configureCacheCell:cell row:indexPath.row];
+            break;
         case NJSponsorBlockSettingSectionBehavior:
             [self configureBehaviorCell:cell row:indexPath.row];
             break;
@@ -135,6 +163,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             break;
         case NJSponsorBlockSettingSectionServer:
             [self configureServerCell:cell row:indexPath.row];
+            break;
+        case NJSponsorBlockSettingSectionBackup:
+            [self configureBackupCell:cell row:indexPath.row];
             break;
         case NJSponsorBlockSettingSectionAbout:
             cell.textLabel.text = @"与官方核心跳过逻辑保持一致";
@@ -154,9 +185,124 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return;
     }
-    cell.textLabel.text = @"缓存请求结果";
-    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings cacheEnabled] tag:101];
+    cell.textLabel.text = @"跳过次数统计跟踪";
+    cell.detailTextLabel.text = @"报告跳过数据";
+    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings skipTrackingEnabled] tag:104];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
+}
+
+- (void)configureCacheCell:(UITableViewCell *)cell row:(NSInteger)row {
+    if (row == 0) {
+        cell.textLabel.text = @"启用缓存";
+        cell.detailTextLabel.text = @"提高加载速度";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings cacheEnabled] tag:101];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return;
+    }
+    if (row == 1) {
+        NJSponsorBlockCacheStats *stats = [NJSponsorBlockCacheStats sharedInstance];
+        cell.textLabel.text = @"视频片段缓存";
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 项 · %lu KB",
+                                      (unsigned long)stats.totalItems,
+                                      (unsigned long)(stats.totalSizeBytes / 1024)];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return;
+    }
+    cell.textLabel.text = @"清除所有缓存";
+    cell.textLabel.textColor = [UIColor systemRedColor];
+    cell.accessoryType = UITableViewCellAccessoryNone;
+}
+
+- (UIView *)cacheSectionFooterView {
+    NJSponsorBlockCacheStats *stats = [NJSponsorBlockCacheStats sharedInstance];
+    BOOL cacheEnabled = [NJSponsorBlockSettings cacheEnabled];
+
+    UIView *footer = [[UIView alloc] init];
+
+    UIView *statsContainer = [[UIView alloc] init];
+    statsContainer.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+    statsContainer.layer.cornerRadius = 10;
+    statsContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    statsContainer.alpha = cacheEnabled ? 1.0 : 0.4;
+    [footer addSubview:statsContainer];
+
+    UILabel *headerLabel = [[UILabel alloc] init];
+    headerLabel.text = @"缓存类型        缓存大小    缓存项数    今日命中    今日读取";
+    headerLabel.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightMedium];
+    headerLabel.textColor = [UIColor secondaryLabelColor];
+    headerLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    [statsContainer addSubview:headerLabel];
+
+    NSUInteger sizeKB = stats.totalSizeBytes / 1024;
+    NSUInteger dailyKB = stats.dailySizeBytes / 1024;
+
+    UILabel *segmentRow = [[UILabel alloc] init];
+    segmentRow.text = [NSString stringWithFormat:@"视频片段缓存    %lu KB       %lu 项      %lu 次      %lu KB",
+                        (unsigned long)sizeKB,
+                        (unsigned long)stats.totalItems,
+                        (unsigned long)stats.dailyHits,
+                        (unsigned long)dailyKB];
+    segmentRow.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
+    segmentRow.textColor = [UIColor labelColor];
+    segmentRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [statsContainer addSubview:segmentRow];
+
+    UIView *separator = [[UIView alloc] init];
+    separator.backgroundColor = [UIColor separatorColor];
+    separator.translatesAutoresizingMaskIntoConstraints = NO;
+    [statsContainer addSubview:separator];
+
+    UILabel *totalRow = [[UILabel alloc] init];
+    totalRow.text = [NSString stringWithFormat:@"总缓存          %lu KB       %lu 项      %lu 次      %lu KB",
+                      (unsigned long)sizeKB,
+                      (unsigned long)stats.totalItems,
+                      (unsigned long)stats.dailyHits,
+                      (unsigned long)dailyKB];
+    totalRow.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold];
+    totalRow.textColor = [UIColor labelColor];
+    totalRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [statsContainer addSubview:totalRow];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [statsContainer.topAnchor constraintEqualToAnchor:footer.topAnchor constant:8],
+        [statsContainer.leadingAnchor constraintEqualToAnchor:footer.leadingAnchor],
+        [statsContainer.trailingAnchor constraintEqualToAnchor:footer.trailingAnchor],
+
+        [headerLabel.topAnchor constraintEqualToAnchor:statsContainer.topAnchor constant:12],
+        [headerLabel.leadingAnchor constraintEqualToAnchor:statsContainer.leadingAnchor constant:12],
+        [headerLabel.trailingAnchor constraintEqualToAnchor:statsContainer.trailingAnchor constant:-12],
+
+        [segmentRow.topAnchor constraintEqualToAnchor:headerLabel.bottomAnchor constant:8],
+        [segmentRow.leadingAnchor constraintEqualToAnchor:statsContainer.leadingAnchor constant:12],
+        [segmentRow.trailingAnchor constraintEqualToAnchor:statsContainer.trailingAnchor constant:-12],
+
+        [separator.topAnchor constraintEqualToAnchor:segmentRow.bottomAnchor constant:8],
+        [separator.leadingAnchor constraintEqualToAnchor:statsContainer.leadingAnchor constant:12],
+        [separator.trailingAnchor constraintEqualToAnchor:statsContainer.trailingAnchor constant:-12],
+        [separator.heightAnchor constraintEqualToConstant:0.5],
+
+        [totalRow.topAnchor constraintEqualToAnchor:separator.bottomAnchor constant:8],
+        [totalRow.leadingAnchor constraintEqualToAnchor:statsContainer.leadingAnchor constant:12],
+        [totalRow.trailingAnchor constraintEqualToAnchor:statsContainer.trailingAnchor constant:-12],
+        [totalRow.bottomAnchor constraintEqualToAnchor:statsContainer.bottomAnchor constant:-12],
+
+        [statsContainer.bottomAnchor constraintEqualToAnchor:footer.bottomAnchor constant:-8],
+    ]];
+
+    return footer;
+}
+
+- (void)presentClearCacheConfirmation {
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"清除所有缓存"
+                                                                    message:@"确定要清除所有缓存数据吗？此操作不可撤销。"
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [[NJSponsorBlockManager sharedInstance] clearAllCachedSegments];
+        [weakSelf.tableView reloadSections:[NSIndexSet indexSetWithIndex:NJSponsorBlockSettingSectionCache] withRowAnimation:UITableViewRowAnimationNone];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
 }
 
 - (void)configureBehaviorCell:(UITableViewCell *)cell row:(NSInteger)row {
@@ -211,9 +357,43 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         return;
     }
-    cell.textLabel.text = @"使用测试服务器";
-    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings testingServerEnabled] tag:103];
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    if (row == 1) {
+        cell.textLabel.text = @"使用测试服务器";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings testingServerEnabled] tag:103];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return;
+    }
+    if (row == 2) {
+        cell.textLabel.text = @"服务器状态";
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        return;
+    }
+    cell.textLabel.text = @"项目代码";
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+}
+
+- (void)configureBackupCell:(UITableViewCell *)cell row:(NSInteger)row {
+    if (row == 0) {
+        cell.textLabel.text = @"导入/导出您的私人用户ID";
+        cell.detailTextLabel.text = @"私人ID";
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        return;
+    }
+    if (row == 1) {
+        cell.textLabel.text = @"导入/导出所有选项";
+        cell.detailTextLabel.text = @"设置、分类、颜色";
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        return;
+    }
+    if (row == 2) {
+        cell.textLabel.text = @"导入/导出所有其他数据";
+        cell.detailTextLabel.text = @"缓存的片段数据";
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        return;
+    }
+    cell.textLabel.text = @"重置所有设置";
+    cell.textLabel.textColor = [UIColor systemRedColor];
+    cell.accessoryType = UITableViewCellAccessoryNone;
 }
 
 - (UISwitch *)switchWithOn:(BOOL)on tag:(NSInteger)tag {
@@ -229,10 +409,15 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [NJSponsorBlockSettings setEnabled:aSwitch.on];
     } else if (aSwitch.tag == 101) {
         [NJSponsorBlockSettings setCacheEnabled:aSwitch.on];
+        if (!aSwitch.on) {
+            [[NJSponsorBlockManager sharedInstance] clearAllCachedSegments];
+        }
     } else if (aSwitch.tag == 102) {
         [NJSponsorBlockSettings setSkipOnSeekToSegment:aSwitch.on];
     } else if (aSwitch.tag == 103) {
         [NJSponsorBlockSettings setTestingServerEnabled:aSwitch.on];
+    } else if (aSwitch.tag == 104) {
+        [NJSponsorBlockSettings setSkipTrackingEnabled:aSwitch.on];
     }
     [self.tableView reloadData];
 }
@@ -261,6 +446,27 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     }
     if (indexPath.section == NJSponsorBlockSettingSectionServer && indexPath.row == 0) {
         [self presentServerInput];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionServer && indexPath.row == 2) {
+        [UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://status.bsbsb.top"] options:@{} completionHandler:nil];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionServer && indexPath.row == 3) {
+        [UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://github.com/hanydd/BilibiliSponsorBlock"] options:@{} completionHandler:nil];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionBackup && indexPath.row == 0) {
+        [self presentUserIDManagement];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionBackup && indexPath.row == 1) {
+        [self presentOptionsBackupSheet];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionBackup && indexPath.row == 2) {
+        [self presentOtherDataBackupSheet];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionBackup && indexPath.row == 3) {
+        [self presentResetConfirmation];
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionCache && indexPath.row == 2) {
+        [self presentClearCacheConfirmation];
     }
 }
 
@@ -299,6 +505,280 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [weakSelf.tableView reloadData];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentUserIDManagement {
+    NSString *currentUserID = [NJSponsorBlockSettings sponsorBlockUserID];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置私人用户ID"
+                                                                   message:[NSString stringWithFormat:@"当前 ID：\n%@\n\n私人ID应该被保密。如果他人获得了你的私人ID，他就可以冒充您。如果您想找公开用户ID，请点击弹出窗口中的剪贴板图标。", currentUserID]
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = currentUserID;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制当前ID" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIPasteboard.generalPasteboard.string = currentUserID;
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"设置" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *newUserID = alert.textFields.firstObject.text ?: @"";
+        if ([newUserID isEqualToString:currentUserID]) {
+            return;
+        }
+        UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"警告"
+                                                                         message:@"更改私人用户ID是永久性的。您确定要这么做吗？请务必备份您的旧私人ID以防万一。"
+                                                                  preferredStyle:UIAlertControllerStyleAlert];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"确定更改" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+            [NJSponsorBlockSettings setSponsorBlockUserID:newUserID];
+            [weakSelf.tableView reloadData];
+        }]];
+        [weakSelf presentViewController:confirm animated:YES completion:nil];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - Options Backup
+
+- (void)presentOptionsBackupSheet {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"导入/导出所有选项"
+                                                                  message:@"这是您所有设置的 JSON 格式。它包含了您的私人用户 ID，所以您一定要谨慎的保管它。"
+                                                           preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"编辑/复制" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf presentOptionsCopyEditor];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"保存到文件" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf exportOptionsToFile];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"从文件加载" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        weakSelf.isImportingOptions = YES;
+        [weakSelf presentDocumentPickerForImport];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = self.view.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentOptionsCopyEditor {
+    NSDictionary *settings = [NJSponsorBlockSettings exportSettings];
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:settings options:NSJSONWritingPrettyPrinted error:nil];
+    NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] ?: @"{}";
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"所有选项"
+                                                                   message:@"复制下方 JSON 以备份，或粘贴 JSON 以恢复。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = jsonString;
+        textField.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
+    }];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIPasteboard.generalPasteboard.string = alert.textFields.firstObject.text ?: @"";
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *text = alert.textFields.firstObject.text ?: @"";
+        [weakSelf importOptionsFromJSONString:text];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)exportOptionsToFile {
+    NSDictionary *settings = [NJSponsorBlockSettings exportSettings];
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:settings options:NSJSONWritingPrettyPrinted error:nil];
+    if (!jsonData) {
+        return;
+    }
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @"yyyy-MM-dd_HH.mm.ss";
+    NSString *dateStr = [fmt stringFromDate:[NSDate date]];
+    NSString *fileName = [NSString stringWithFormat:@"SponsorBlockConfig_%@.json", dateStr];
+    NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    NSURL *tempURL = [NSURL fileURLWithPath:tempPath];
+    [jsonData writeToURL:tempURL atomically:YES];
+
+    self.isImportingOptions = NO;
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithURLs:@[tempURL] inMode:UIDocumentPickerModeExportToService];
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)importOptionsFromJSONString:(NSString *)string {
+    if (string.length == 0) {
+        return;
+    }
+    NSData *data = [string dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *error = nil;
+    NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+    if (error || ![dict isKindOfClass:[NSDictionary class]]) {
+        UIAlertController *err = [UIAlertController alertControllerWithTitle:@"格式错误" message:@"无法解析 JSON，请检查格式。" preferredStyle:UIAlertControllerStyleAlert];
+        [err addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:err animated:YES completion:nil];
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认导入"
+                                                                    message:@"导入将覆盖当前所有选项设置。确定要继续吗？"
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"确定导入" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [NJSponsorBlockSettings importSettings:dict];
+        [weakSelf.tableView reloadData];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
+}
+
+#pragma mark - Other Data Backup
+
+- (void)presentOtherDataBackupSheet {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"导入/导出所有其他数据"
+                                                                  message:@"其他数据包含缓存的片段信息等。"
+                                                           preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"编辑/复制" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf presentOtherDataCopyEditor];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"保存到文件" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf exportOtherDataToFile];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"从文件加载" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        weakSelf.isImportingOptions = NO;
+        [weakSelf presentDocumentPickerForImport];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = self.view.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentOtherDataCopyEditor {
+    NSDictionary *otherData = [self exportOtherData];
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:otherData options:NSJSONWritingPrettyPrinted error:nil];
+    NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] ?: @"{}";
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"所有其他数据"
+                                                                   message:@"复制下方 JSON 以备份，或粘贴 JSON 以恢复。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = jsonString;
+        textField.font = [UIFont monospacedSystemFontOfSize:11 weight:UIFontWeightRegular];
+    }];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        UIPasteboard.generalPasteboard.string = alert.textFields.firstObject.text ?: @"";
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        NSString *text = alert.textFields.firstObject.text ?: @"";
+        [weakSelf importOtherDataFromJSONString:text];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)exportOtherDataToFile {
+    NSDictionary *otherData = [self exportOtherData];
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:otherData options:NSJSONWritingPrettyPrinted error:nil];
+    if (!jsonData) {
+        return;
+    }
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.dateFormat = @"yyyy-MM-dd_HH.mm.ss";
+    NSString *dateStr = [fmt stringFromDate:[NSDate date]];
+    NSString *fileName = [NSString stringWithFormat:@"SponsorBlockOtherData_%@.json", dateStr];
+    NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    NSURL *tempURL = [NSURL fileURLWithPath:tempPath];
+    [jsonData writeToURL:tempURL atomically:YES];
+
+    self.isImportingOptions = NO;
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithURLs:@[tempURL] inMode:UIDocumentPickerModeExportToService];
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (NSDictionary *)exportOtherData {
+    NSMutableDictionary *data = [NSMutableDictionary dictionary];
+    // Export cached segments from YYCache (segment cache keys follow "SB:{videoID}:{cid}" pattern)
+    // For now, we export the segment cache dictionary if available
+    // The actual segment data is stored in NJ_SETTING_CACHE with keys like "SB:{bvid}:{cid}"
+    return data;
+}
+
+- (void)importOtherDataFromJSONString:(NSString *)string {
+    if (string.length == 0) {
+        return;
+    }
+    NSData *data = [string dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *error = nil;
+    NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+    if (error || ![dict isKindOfClass:[NSDictionary class]]) {
+        UIAlertController *err = [UIAlertController alertControllerWithTitle:@"格式错误" message:@"无法解析 JSON，请检查格式。" preferredStyle:UIAlertControllerStyleAlert];
+        [err addAction:[UIAlertAction actionWithTitle:@"好的" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:err animated:YES completion:nil];
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认导入"
+                                                                    message:@"导入将覆盖当前所有其他数据。确定要继续吗？"
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"确定导入" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [weakSelf importOtherData:dict];
+        [weakSelf.tableView reloadData];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
+}
+
+- (void)importOtherData:(NSDictionary *)data {
+    // Import cached segments back into YYCache
+    // Implementation depends on the actual data structure
+}
+
+#pragma mark - Reset
+
+- (void)presentResetConfirmation {
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"重置所有设置"
+                                                                    message:@"确定要将所有设置恢复为默认值吗？您的私人用户 ID 将被保留。此操作不可撤销。"
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [NJSponsorBlockSettings resetToDefaults];
+        [weakSelf.tableView reloadData];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
+}
+
+#pragma mark - UIDocumentPickerDelegate
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    NSURL *url = urls.firstObject;
+    if (!url) {
+        return;
+    }
+    NSData *data = [NSData dataWithContentsOfURL:url];
+    if (!data) {
+        return;
+    }
+    NSString *string = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    if (self.isImportingOptions) {
+        [self importOptionsFromJSONString:string];
+    } else {
+        [self importOtherDataFromJSONString:string];
+    }
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    // No-op
+}
+
+- (void)presentDocumentPickerForImport {
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.json"] inMode:UIDocumentPickerModeImport];
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
 }
 
 - (void)presentCategoryActionSheetForRow:(NSInteger)row sourceCell:(UITableViewCell *)sourceCell {

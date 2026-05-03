@@ -9,7 +9,6 @@
 #import <CommonCrypto/CommonDigest.h>
 #import <math.h>
 
-static NSString * const NJSponsorBlockUserIDKey = @"NJSponsorBlockVoteUserIDKey";
 static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockService";
 
 @interface NJSponsorBlockService ()
@@ -379,14 +378,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
 }
 
 - (NSString *)sponsorBlockUserID {
-    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
-    NSString *userID = [defaults stringForKey:NJSponsorBlockUserIDKey];
-    if (userID.length > 0) {
-        return userID;
-    }
-    userID = NSUUID.UUID.UUIDString;
-    [defaults setObject:userID forKey:NJSponsorBlockUserIDKey];
-    return userID;
+    return [NJSponsorBlockSettings sponsorBlockUserID];
 }
 
 - (NSError *)errorWithCode:(NSInteger)code message:(NSString *)message {

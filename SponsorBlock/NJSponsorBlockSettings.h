@@ -57,6 +57,15 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockCategoryAction) {
 + (UIColor *)defaultColorForCategory:(NSString *)category;
 + (void)resetColors;
 
++ (NSString *)sponsorBlockUserID;
++ (void)setSponsorBlockUserID:(NSString *)userID;
++ (BOOL)skipTrackingEnabled;
++ (void)setSkipTrackingEnabled:(BOOL)enabled;
+
++ (NSDictionary<NSString *, id> *)exportSettings;
++ (BOOL)importSettings:(NSDictionary<NSString *, id> *)settings;
++ (void)resetToDefaults;
+
 + (NSString *)requestConfigurationIdentifier;
 + (void)postSettingsDidChangeNotification;
 

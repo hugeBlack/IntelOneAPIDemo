@@ -7,6 +7,7 @@
 #import "NJSponsorBlockSegment.h"
 #import "NJSponsorBlockService.h"
 #import "NJSponsorBlockSettings.h"
+#import "NJSponsorBlockCacheStats.h"
 #import "NJCommonDefine.h"
 #import "NJSettingCache.h"
 #import <math.h>
@@ -64,6 +65,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 @property (nonatomic, assign) NSTimeInterval currentPlaybackTime;
 @property (nonatomic, assign) NSTimeInterval nativeVideoDuration;
 @property (nonatomic, copy) NSString *loadedServerBaseURLString;
+@property (nonatomic, strong) NSMutableSet<NSString *> *trackedCacheKeys;
 
 - (void)updateNativeVideoDuration:(NSTimeInterval)duration;
 - (NSTimeInterval)videoDurationInObject:(id)object;
@@ -71,6 +73,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 - (NSTimeInterval)durationFromKey:(NSString *)key value:(id)value;
 - (NSTimeInterval)durationFromCandidateAccessorsOfObject:(id)object;
 - (void)invalidateCachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid;
+- (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message;
 
 @end
@@ -97,6 +100,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
         self.service = [[NJSponsorBlockService alloc] init];
         self.cooldownUntil = [NSDate distantPast];
         self.lastProbeLogTime = -100;
+        self.trackedCacheKeys = [NSMutableSet set];
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(handleSettingsDidChange)
                                                      name:NJSponsorBlockSettingsDidChangeNotification
@@ -362,7 +366,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 }
 
 - (void)reportSegmentSkipped:(NJSponsorBlockSegment *)segment {
-    if (segment.uuid.length == 0) {
+    if (segment.uuid.length == 0 || ![NJSponsorBlockSettings skipTrackingEnabled]) {
         return;
     }
     if (segment.actionType.length == 0 || [segment.actionType isEqualToString:@"skip"]) {
@@ -515,6 +519,8 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     if (fabs([item.date timeIntervalSinceNow]) > NJSponsorBlockCacheTTL) {
         return nil;
     }
+    NSUInteger size = [self estimatedSizeForSegments:item.segments];
+    [[NJSponsorBlockCacheStats sharedInstance] recordHitWithSize:size];
     return item.segments;
 }
 
@@ -522,10 +528,14 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     if (![NJSponsorBlockSettings cacheEnabled]) {
         return;
     }
+    NSString *key = [self cacheKeyWithVideoID:videoID cid:cid];
     NJSponsorBlockCacheItem *item = [[NJSponsorBlockCacheItem alloc] init];
     item.segments = segments ?: @[];
     item.date = [NSDate date];
-    [NJ_SETTING_CACHE setObject:item forKey:[self cacheKeyWithVideoID:videoID cid:cid] withBlock:nil];
+    [NJ_SETTING_CACHE setObject:item forKey:key withBlock:nil];
+    [self.trackedCacheKeys addObject:key];
+    NSUInteger size = [self estimatedSizeForSegments:item.segments];
+    [[NJSponsorBlockCacheStats sharedInstance] recordSaveWithSize:size];
 }
 
 - (NSString *)cacheKeyWithVideoID:(NSString *)videoID cid:(NSInteger)cid {
@@ -536,7 +546,34 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 }
 
 - (void)invalidateCachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid {
-    [NJ_SETTING_CACHE removeObjectForKey:[self cacheKeyWithVideoID:videoID cid:cid]];
+    NSString *key = [self cacheKeyWithVideoID:videoID cid:cid];
+    [NJ_SETTING_CACHE removeObjectForKey:key];
+    [self.trackedCacheKeys removeObject:key];
+    [[NJSponsorBlockCacheStats sharedInstance] recordRemoval];
+}
+
+- (void)clearAllCachedSegments {
+    for (NSString *key in [self.trackedCacheKeys copy]) {
+        [NJ_SETTING_CACHE removeObjectForKey:key];
+    }
+    [self.trackedCacheKeys removeAllObjects];
+    [[NJSponsorBlockCacheStats sharedInstance] clearAll];
+}
+
+- (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments {
+    if (segments.count == 0) {
+        return 0;
+    }
+    NSUInteger size = 0;
+    for (NJSponsorBlockSegment *seg in segments) {
+        size += seg.uuid.length * 2;
+        size += seg.videoID.length * 2;
+        size += seg.category.length * 2;
+        size += seg.actionType.length * 2;
+        size += sizeof(NSTimeInterval) * 3;
+        size += sizeof(NSInteger);
+    }
+    return size;
 }
 
 - (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message {
