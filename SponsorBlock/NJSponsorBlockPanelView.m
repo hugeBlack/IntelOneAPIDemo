@@ -16,7 +16,6 @@
 
 static CGFloat const NJSponsorBlockPanelWidth = 310.0;
 static CGFloat const NJSponsorBlockPanelMinHeight = 154.0;
-static CGFloat const NJSponsorBlockPanelCollapsedHeight = 134.0;
 static CGFloat const NJSponsorBlockPanelMargin = 12.0;
 static CGFloat const NJSponsorBlockPanelTopMargin = 48.0;
 static CGFloat const NJSponsorBlockPanelBottomMargin = 24.0;
@@ -69,7 +68,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, strong) UIButton *noticeCloseButton;
 @property (nonatomic, strong) UIButton *toggleButton;
 @property (nonatomic, strong) UIButton *submitButton;
-@property (nonatomic, strong) UIButton *collapseButton;
 @property (nonatomic, strong) UILabel *timeLabel;
 @property (nonatomic, strong) UILabel *statsLabel;
 @property (nonatomic, strong) NJSponsorBlockSegment *noticeSegment;
@@ -83,7 +81,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, assign) NSTimeInterval submissionStartTime;
 @property (nonatomic, assign) NSTimeInterval submissionVideoDuration;
 @property (nonatomic, assign) NSInteger submissionCID;
-@property (nonatomic, assign) BOOL collapsed;
 @property (nonatomic, assign) BOOL submissionInProgress;
 @property (nonatomic, assign) BOOL submissionRequestInFlight;
 
@@ -146,7 +143,26 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return overlayHostView;
     }
 
-    NSArray<UIWindow *> *windows = UIApplication.sharedApplication.windows;
+    NSArray<UIWindow *> *windows = @[];
+    if (@available(iOS 13.0, *)) {
+        UIWindowScene *scene = [self activeWindowScene];
+        if (scene) {
+            windows = scene.windows;
+        }
+    }
+    if (windows.count == 0) {
+        UIWindow *keyWindow = nil;
+        for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if ([scene isKindOfClass:UIWindowScene.class] && scene.activationState == UISceneActivationStateForegroundActive) {
+                for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+                    if (window.isKeyWindow) { keyWindow = window; break; }
+                }
+            }
+        }
+        if (keyWindow) { return keyWindow; }
+        return nil;
+    }
+
     UIWindow *bestWindow = nil;
     for (UIWindow *window in windows) {
         if (window.hidden || window.alpha <= 0.01 || CGRectIsEmpty(window.bounds)) {
@@ -671,17 +687,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.subtitleLabel.textColor = [UIColor colorWithWhite:0.72 alpha:1];
     self.subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
 
-    self.collapseButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.collapseButton setTitle:@"－" forState:UIControlStateNormal];
-    self.collapseButton.tintColor = UIColor.whiteColor;
-    self.collapseButton.titleLabel.font = [UIFont boldSystemFontOfSize:20];
-    [self.collapseButton addTarget:self action:@selector(toggleCollapsed) forControlEvents:UIControlEventTouchUpInside];
-
     UIStackView *headerTextStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.titleLabel, self.subtitleLabel]];
     headerTextStack.axis = UILayoutConstraintAxisVertical;
     headerTextStack.spacing = 2;
 
-    self.headerStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.iconLabel, headerTextStack, self.collapseButton]];
+    self.headerStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.iconLabel, headerTextStack]];
     self.headerStack.axis = UILayoutConstraintAxisHorizontal;
     self.headerStack.alignment = UIStackViewAlignmentCenter;
     self.headerStack.spacing = 8;
@@ -784,7 +794,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
     [NSLayoutConstraint activateConstraints:@[
         [self.iconLabel.widthAnchor constraintEqualToConstant:34],
-        [self.collapseButton.widthAnchor constraintEqualToConstant:32],
         [self.toggleButton.widthAnchor constraintEqualToConstant:70],
         [self.toggleButton.heightAnchor constraintEqualToConstant:30],
         [self.submitButton.widthAnchor constraintEqualToConstant:52],
@@ -848,7 +857,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self updateNoticeWithManager:manager segments:segments];
     [self rebuildSegmentRowsWithSegments:segments manager:manager];
     [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
-    [self applyCollapsedState];
     [self resizeForContent];
     [[self class] renderTimeline:[[self class] sharedTimelineView]];
     [[self class] refreshNativeTimelines];
@@ -856,17 +864,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)updateHeaderWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments {
     self.titleLabel.text = @"小电视空降助手";
-    if (self.collapsed) {
-        if (segments.count > 0) {
-            self.subtitleLabel.text = [NSString stringWithFormat:@"%lu 个片段", (unsigned long)segments.count];
-        } else if (manager.videoID.length > 0) {
-            self.subtitleLabel.text = @"暂无片段";
-        } else {
-            self.subtitleLabel.text = @"等待识别";
-        }
-        return;
-    }
-
     if (segments.count > 0) {
         self.subtitleLabel.text = [NSString stringWithFormat:@"数据库中有 %lu 个可用片段", (unsigned long)segments.count];
     } else if (manager.videoID.length > 0) {
@@ -898,7 +895,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)updateNoticeWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments {
     (void)segments;
-    if (![NJSponsorBlockSettings enabled] || self.collapsed) {
+    if (![NJSponsorBlockSettings enabled]) {
         [self hideNotice];
         return;
     }
@@ -968,9 +965,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)rebuildSegmentRowsWithSegments:(NSArray<NJSponsorBlockSegment *> *)segments manager:(NJSponsorBlockManager *)manager {
     [self clearSegmentRows];
-    if (self.collapsed) {
-        return;
-    }
 
     UIView *activeRow = nil;
     for (NJSponsorBlockSegment *segment in segments) {
@@ -1032,26 +1026,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.noticeSegment = nil;
     self.noticeView.hidden = YES;
     self.noticeHeightConstraint.constant = 0;
-}
-
-- (void)applyCollapsedState {
-    BOOL hideContent = self.collapsed;
-
-    self.segmentScrollView.hidden = hideContent;
-    self.segmentScrollView.userInteractionEnabled = !hideContent;
-    self.segmentStackView.hidden = hideContent;
-    self.segmentStackView.userInteractionEnabled = !hideContent;
-
-    self.progressView.hidden = hideContent;
-    self.progressView.userInteractionEnabled = !hideContent;
-
-    self.footerStack.hidden = hideContent;
-    self.footerStack.userInteractionEnabled = !hideContent;
-
-    [self.collapseButton setTitle:(self.collapsed ? @"＋" : @"－") forState:UIControlStateNormal];
-
-    [self bringSubviewToFront:self.headerStack];
-    [self.headerStack bringSubviewToFront:self.collapseButton];
 }
 
 - (void)clearSegmentRows {
@@ -1439,7 +1413,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (UIViewController *)presentationViewController {
     UIViewController *controller = NJSponsorBlockSharedOverlayController;
     if (!controller) {
-        controller = UIApplication.sharedApplication.keyWindow.rootViewController;
+        controller = [[[self class] currentHostView] window].rootViewController;
     }
     while (controller.presentedViewController && ![controller.presentedViewController isKindOfClass:UIAlertController.class]) {
         controller = controller.presentedViewController;
@@ -1563,23 +1537,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockSeekRequestNotification object:@(segment.startTime)];
 }
 
-- (void)toggleCollapsed {
-    self.collapsed = !self.collapsed;
-
-    if ([NSThread isMainThread]) {
-        [self refreshContentOnMainThread];
-    } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self refreshContentOnMainThread];
-        });
-    }
-
-    self.alpha = 0.94;
-    [UIView animateWithDuration:0.16 animations:^{
-        self.alpha = 1.0;
-    }];
-}
-
 - (void)handlePan:(UIPanGestureRecognizer *)pan {
     UIView *superview = self.superview;
     if (!superview) {
@@ -1601,11 +1558,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     }
 
     CGFloat contentHeight = [self segmentRowsContentHeight];
-    CGFloat listHeight = self.collapsed ? 0 : MIN(contentHeight, NJSponsorBlockSegmentListMaxHeight);
+    CGFloat listHeight = MIN(contentHeight, NJSponsorBlockSegmentListMaxHeight);
     self.segmentScrollHeightConstraint.constant = listHeight;
     self.segmentScrollView.scrollEnabled = contentHeight > listHeight + 1.0;
 
-    CGFloat height = self.collapsed ? NJSponsorBlockPanelCollapsedHeight : NJSponsorBlockPanelChromeHeight + listHeight + (self.noticeView.hidden ? 0 : 52.0);
+    CGFloat height = NJSponsorBlockPanelChromeHeight + listHeight + (self.noticeView.hidden ? 0 : 52.0);
 
     CGRect frame = self.frame;
     CGFloat availableWidth = CGRectGetWidth(superview.bounds) - NJSponsorBlockPanelMargin * 2.0;
