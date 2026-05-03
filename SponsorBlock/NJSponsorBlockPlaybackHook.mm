@@ -7,6 +7,7 @@
 #import <objc/runtime.h>
 #import <substrate.h>
 #import "NJCommonDefine.h"
+#import "NJSettingCache.h"
 #import "NJSponsorBlockManager.h"
 #import "NJSponsorBlockPanelView.h"
 #import "NJSponsorBlockSegment.h"

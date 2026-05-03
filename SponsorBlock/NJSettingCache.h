@@ -5,7 +5,7 @@
 //  Created by s s on 2026/5/2.
 //
 #include "YYCache.h"
-@import ObjectiveC;
+#include <objc/objc-runtime.h>
 #define PrivClass(name) ((Class)objc_lookUpClass(#name))
 
 @interface NJSettingCache : NSObject

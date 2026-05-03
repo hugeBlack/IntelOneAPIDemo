@@ -7,8 +7,12 @@
 @import UIKit;
 @import ObjectiveC;
 #include "NJCommonDefine.h"
+#include "NJSettingCache.h"
+#include "NJSponsorBlockSettings.h"
+#include "NJSponsorBlockSettingViewController.h"
 #import "NJSponsorBlockPanelView.h"
 #import "NJSponsorBlockManager.h"
+#include "NJSettingDefine.h"
 
 @interface BBPlayerControlContainerWidgetView : UIView
 @end
@@ -244,11 +248,73 @@ void hook_BBPlayerSeekbarContainerView_layoutSubviews(id self, SEL sel) {
 }
 
 id (*orig_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error)(id self, SEL, id data, id registry, id* error) = nil;
-
 id hook_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error(id self, SEL sel, id data, id registry, id* error) {
     id ret = orig_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error(self, sel, data, registry, error);
     [[NJSponsorBlockManager sharedInstance] inspectModelObject:ret source:@"BAPIAppViewuniteV1ViewReply"];
     return ret;
+}
+
+
+// settings hooks
+
+@interface NJSettingSkullViewModel : NSObject
+
+/// 业务id
+@property (nonatomic, copy) NSString *bizId;
+/// cell重利用Id
+@property (nonatomic, copy) NSString *cellId;
+/// 标题
+@property (nonatomic, copy) NSString *title;
+/// 副标题
+@property (nonatomic, copy) NSString *subTitle;
+
+
+- (instancetype)initWithBizId:(NSString *)bizId
+                       cellId:(NSString *)cellId
+                        title:(NSString *)title;
+
+@end
+
+@interface NJSettingBizHandler : NSObject
+
+/// 设置vc
+@property (nonatomic, weak) UIViewController *settingViewController;
+
+/// 处理业务
+/// - Parameter viewModel: 数据
+- (void)handleBizWithViewModel:(NJSettingSkullViewModel *)viewModel;
+@end
+
+
+void (*orig_NJSettingBizHandler_handleBizWithViewModel)(NJSettingBizHandler* self, SEL sel, NJSettingSkullViewModel* viewModel) = nil;
+void hook_NJSettingBizHandler_handleBizWithViewModel(NJSettingBizHandler* self, SEL sel, NJSettingSkullViewModel* viewModel) {
+    if ([[viewModel bizId] isEqualToString:NJ_SPONSOR_BLOCK_SETTING_PAGE_BIZ_ID]) {
+        NJSponsorBlockSettingViewController *settingVC = [[NJSponsorBlockSettingViewController alloc] init];
+        [self.settingViewController.navigationController pushViewController:settingVC animated:YES];
+        return;
+    }
+    orig_NJSettingBizHandler_handleBizWithViewModel(self, sel, viewModel);
+}
+
+@interface NJSettingInjectDataProvider : NSObject
+
+/// 要注入的数据
+- (NSArray<NJSettingSkullViewModel *> *)injectDatas;
+
+@end
+
+NSArray<NJSettingSkullViewModel *>* (*orig_NJSettingInjectDataProvider_injectDatas)(NJSettingInjectDataProvider* self, SEL sel) = nil;
+NSArray<NJSettingSkullViewModel *>* hook_NJSettingInjectDataProvider_injectDatas(NJSettingInjectDataProvider* self, SEL sel) {
+    NSMutableArray* datas = [orig_NJSettingInjectDataProvider_injectDatas(self, sel) mutableCopy];
+    
+    NJSettingSkullViewModel *model = [[PrivClass(NJSettingSkullViewModel) alloc] initWithBizId:NJ_SPONSOR_BLOCK_SETTING_PAGE_BIZ_ID
+                                                                                 cellId:NJ_ARROW_CELL_ID
+                                                                                  title:@"SponsorBlock"];
+    model.subTitle = [NJSponsorBlockSettings enabled] ? @"已启用" : @"已关闭";
+
+    
+    [datas insertObject:model atIndex:datas.count - 2];
+    return [datas copy];
 }
 
 
@@ -281,5 +347,16 @@ __attribute__((constructor)) void TweakInit(void) {
     JRSwizzleInstanceMethod(objc_getClass("BAPIAppViewuniteV1ViewReply"), @selector(initWithData:extensionRegistry:error:),
                             (IMP)hook_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error,
                             (IMP*)&orig_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error);
+    
+    
+    // settings stuff
+    
+    JRSwizzleInstanceMethod(objc_getClass("NJSettingBizHandler"), @selector(handleBizWithViewModel:),
+                            (IMP)hook_NJSettingBizHandler_handleBizWithViewModel,
+                            (IMP*)&orig_NJSettingBizHandler_handleBizWithViewModel);
+    
+    JRSwizzleInstanceMethod(objc_getClass("NJSettingInjectDataProvider"), @selector(injectDatas),
+                            (IMP)hook_NJSettingInjectDataProvider_injectDatas,
+                            (IMP*)&orig_NJSettingInjectDataProvider_injectDatas);
     
 }
