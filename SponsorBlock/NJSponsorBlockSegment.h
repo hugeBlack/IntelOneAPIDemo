@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSTimeInterval startTime;
 @property (nonatomic, assign) NSTimeInterval endTime;
 @property (nonatomic, copy) NSString *uuid;
+@property (nonatomic, copy) NSString *videoID;
 @property (nonatomic, copy) NSString *category;
 @property (nonatomic, copy) NSString *actionType;
 @property (nonatomic, assign) NSInteger cid;
