@@ -25,6 +25,7 @@ void swizzle(Class class, SEL originalAction, SEL swizzledAction);
 @property (readonly, weak, nonatomic) BBPlayerWidget *superWidget;
 @property (readonly, copy, nonatomic) NSArray *subWidgets;
 - (void)addSubWidget:(BBPlayerWidget *)subWidget;
+- (void)willLayoutSubWidgets;
 @end
 
 @interface BBPlayerCastBtnWidget : BBPlayerWidget

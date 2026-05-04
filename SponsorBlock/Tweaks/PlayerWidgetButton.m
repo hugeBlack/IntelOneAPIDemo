@@ -12,44 +12,40 @@ void hook_BBPlayerFlexContainerWidget_viewWillDisappear(id self, SEL sel, bool a
     [NJSponsorBlockPanelView removePanel];
 }
 
-void (*orig_BBPlayerHalfScreenTopWidget_setupSubWidgets)(BBPlayerWidget* self, SEL sel) = nil;
-void (*orig_BBPlayerFullScreenTopWidget_setupSubWidgets)(BBPlayerWidget* self, SEL sel) = nil;
-void (*orig_BBHD2MPPlayerHalfScreenTopWidget_setupSubWidgets)(BBPlayerWidget* self, SEL sel) = nil;
-void (*orig_BBHD2MPPlayerFullScreenTopWidget_setupSubWidgets)(BBPlayerWidget* self, SEL sel) = nil;
-void hook_BBPlayerHalfScreenTopWidget_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
-    static Ivar BBPlayerHalfScreenTopWidget_rightControlWidgetIvar;
-    static Ivar BBPlayerFullScreenTopWidget_rightControlWidgetIvar;
-    static Ivar BBHD2MPPlayerHalfScreenTopWidget_rightControlWidgetIvar;
-    static Ivar BBHD2MPPlayerFullScreenTopWidget_rightControlWidgetIvar;
-    static Ivar castButtonIvar;
-    
+static const char* kTopWidgetClassNames[] = {
+    "BBPlayerHalfScreenTopWidget",
+    "BBPlayerFullScreenTopWidget",
+    "BBHD2MPPlayerHalfScreenTopWidget",
+    "BBHD2MPPlayerFullScreenTopWidget",
+};
+#define kTopWidgetClassCount 4
+
+static void (*orig_setupSubWidgets[kTopWidgetClassCount])(BBPlayerWidget*, SEL);
+static Ivar rightControlWidgetIvars[kTopWidgetClassCount];
+static Ivar castButtonIvar;
+
+void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        BBPlayerHalfScreenTopWidget_rightControlWidgetIvar = class_getInstanceVariable(PrivClass(BBPlayerHalfScreenTopWidget), "_rightControlWidget");
-        BBPlayerFullScreenTopWidget_rightControlWidgetIvar = class_getInstanceVariable(PrivClass(BBPlayerFullScreenTopWidget), "_rightControlWidget");
-        BBHD2MPPlayerHalfScreenTopWidget_rightControlWidgetIvar = class_getInstanceVariable(PrivClass(BBHD2MPPlayerHalfScreenTopWidget), "_rightControlWidget");
-        BBHD2MPPlayerFullScreenTopWidget_rightControlWidgetIvar = class_getInstanceVariable(PrivClass(BBHD2MPPlayerFullScreenTopWidget), "_rightControlWidget");
+        for (int i = 0; i < kTopWidgetClassCount; i++) {
+            rightControlWidgetIvars[i] = class_getInstanceVariable(objc_lookUpClass(kTopWidgetClassNames[i]), "_rightControlWidget");
+        }
         castButtonIvar = class_getInstanceVariable(PrivClass(BBPlayerCastBtnWidget), "_castBtn");
     });
     
-    Ivar rightControlWidgetIvar = 0;
-    if([self isKindOfClass:PrivClass(BBPlayerHalfScreenTopWidget)]) {
-        orig_BBPlayerHalfScreenTopWidget_setupSubWidgets(self, sel);
-        rightControlWidgetIvar = BBPlayerHalfScreenTopWidget_rightControlWidgetIvar;
-    } else if([self isKindOfClass:PrivClass(BBPlayerFullScreenTopWidget)]) {
-        orig_BBPlayerFullScreenTopWidget_setupSubWidgets(self, sel);
-        rightControlWidgetIvar = BBPlayerFullScreenTopWidget_rightControlWidgetIvar;
-    } else if([self isKindOfClass:PrivClass(BBHD2MPPlayerHalfScreenTopWidget)]) {
-        orig_BBHD2MPPlayerHalfScreenTopWidget_setupSubWidgets(self, sel);
-        rightControlWidgetIvar = BBHD2MPPlayerHalfScreenTopWidget_rightControlWidgetIvar;
-    } else {
-        orig_BBHD2MPPlayerFullScreenTopWidget_setupSubWidgets(self, sel);
-        rightControlWidgetIvar = BBHD2MPPlayerFullScreenTopWidget_rightControlWidgetIvar;
+    int classIndex = -1;
+    for (int i = 0; i < kTopWidgetClassCount; i++) {
+        if (![self isKindOfClass:objc_lookUpClass(kTopWidgetClassNames[i])]) continue;
+        classIndex = i;
+        break;
     }
-    
-    if(![NJSponsorBlockSettings enabled]) {
-        return;
-    }
+    assert(classIndex != -1);
+
+    orig_setupSubWidgets[classIndex](self, sel);
+
+
+    if (![NJSponsorBlockSettings enabled]) return;
+    Ivar rightControlWidgetIvar = rightControlWidgetIvars[classIndex];
 
     BBPlayerWidget* rightControlWidget = object_getIvar(self, rightControlWidgetIvar);
     if([[rightControlWidget subWidgets] count] == 0) {
@@ -63,27 +59,16 @@ void hook_BBPlayerHalfScreenTopWidget_setupSubWidgets(BBPlayerWidget* self, SEL 
     [rightControlWidget addSubWidget:(BBPlayerWidget*)fakeWidget];
 }
 
-
-
 void initPlayerWidgetButtonHooks(void) {
     class_addMethod(objc_getClass("BBPlayerControlContainerWidgetView"),
                     @selector(viewWillDisappear:),
                     (IMP)hook_BBPlayerFlexContainerWidget_viewWillDisappear,
                     "v@:B");
-    
-    JRSwizzleInstanceMethod(PrivClass(BBPlayerHalfScreenTopWidget), @selector(setupSubWidgets),
-                            (IMP)hook_BBPlayerHalfScreenTopWidget_setupSubWidgets,
-                            (IMP*)&orig_BBPlayerHalfScreenTopWidget_setupSubWidgets);
-    
-    JRSwizzleInstanceMethod(PrivClass(BBPlayerFullScreenTopWidget), @selector(setupSubWidgets),
-                            (IMP)hook_BBPlayerHalfScreenTopWidget_setupSubWidgets,
-                            (IMP*)&orig_BBPlayerFullScreenTopWidget_setupSubWidgets);
-    
-    JRSwizzleInstanceMethod(PrivClass(BBHD2MPPlayerHalfScreenTopWidget), @selector(setupSubWidgets),
-                            (IMP)hook_BBPlayerHalfScreenTopWidget_setupSubWidgets,
-                            (IMP*)&orig_BBHD2MPPlayerHalfScreenTopWidget_setupSubWidgets);
-    
-    JRSwizzleInstanceMethod(PrivClass(BBHD2MPPlayerFullScreenTopWidget), @selector(setupSubWidgets),
-                            (IMP)hook_BBPlayerHalfScreenTopWidget_setupSubWidgets,
-                            (IMP*)&orig_BBHD2MPPlayerFullScreenTopWidget_setupSubWidgets);
+
+    for (int i = 0; i < kTopWidgetClassCount; i++) {
+        JRSwizzleInstanceMethod(objc_lookUpClass(kTopWidgetClassNames[i]),
+                                @selector(setupSubWidgets),
+                                (IMP)hook_setupSubWidgets,
+                                (IMP*)&orig_setupSubWidgets[i]);
+    }
 }
