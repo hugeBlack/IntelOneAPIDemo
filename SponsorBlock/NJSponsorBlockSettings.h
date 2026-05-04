@@ -43,6 +43,13 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockCategoryAction) {
 + (NSString *)serverBaseURLString;
 + (void)setServerBaseURLString:(NSString *)serverBaseURLString;
 
++ (BOOL)showSegmentsInSeekbarWidget;
++ (void)setShowSegmentsInSeekbarWidget:(BOOL)enabled;
++ (BOOL)showSegmentsInProgressWidget;
++ (void)setShowSegmentsInProgressWidget:(BOOL)enabled;
++ (BOOL)showSharedEntryButton;
++ (void)setShowSharedEntryButton:(BOOL)enabled;
+
 + (NSArray<NJSponsorBlockCategoryOption *> *)categoryOptions;
 + (NSArray<NSString *> *)requestCategories;
 + (NJSponsorBlockCategoryAction)actionForCategory:(NSString *)category;

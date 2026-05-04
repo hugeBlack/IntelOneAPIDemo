@@ -6,11 +6,14 @@
 //
 #include "Tweaks.h"
 #include "../NJSponsorBlockPanelView.h"
+#include "../NJSponsorBlockSettings.h"
 
 // hooks start
 void (*orig_BBPlayerSeekbarContainerView_layoutSubviews)(id self, SEL sel) = nil;
 void hook_BBPlayerSeekbarContainerView_layoutSubviews(id self, SEL sel) {
-    [NJSponsorBlockPanelView installNativeTimelineInView:(UIView *)self];
+    if ([NJSponsorBlockSettings showSegmentsInSeekbarWidget]) {
+        [NJSponsorBlockPanelView installNativeTimelineInView:(UIView *)self];
+    }
     orig_BBPlayerSeekbarContainerView_layoutSubviews(self, sel);
 }
 
@@ -43,7 +46,9 @@ void hook_willLayoutSubWidgets(id self, SEL sel) {
     
     Ivar playerTrackViewIvar = progressContainerIvars[classIndex];
     UIView* playerTrackView = object_getIvar(self, playerTrackViewIvar);
-    [NJSponsorBlockPanelView installNativeTimelineInView:playerTrackView];
+    if ([NJSponsorBlockSettings showSegmentsInSeekbarWidget]) {
+        [NJSponsorBlockPanelView installNativeTimelineInView:playerTrackView];
+    }
     
     orig_willLayoutSubWidgets[classIndex](self, sel);
 }
@@ -55,8 +60,11 @@ void hook_BBPlayerProgressWidget_willLayoutSubWidgets(id self, SEL sel) {
     dispatch_once(&onceToken, ^{
         seekViewIvar = class_getInstanceVariable([self class], "_seekView");
     });
-    UIView* seekView = object_getIvar(self, seekViewIvar);
-    [NJSponsorBlockPanelView installNativeTimelineInView:seekView];
+
+    if ([NJSponsorBlockSettings showSegmentsInProgressWidget]) {
+        UIView* seekView = object_getIvar(self, seekViewIvar);
+        [NJSponsorBlockPanelView installNativeTimelineInView:seekView];
+    }
     orig_BBPlayerProgressWidget_willLayoutSubWidgets(self, sel);
 }
 

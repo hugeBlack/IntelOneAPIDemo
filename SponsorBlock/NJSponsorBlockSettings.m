@@ -21,6 +21,9 @@ static NSString * const NJSponsorBlockCategoryActionsKey = @"NJSponsorBlockCateg
 static NSString * const NJSponsorBlockCategoryColorsKey = @"NJSponsorBlockCategoryColorsKey";
 static NSString * const NJSponsorBlockUserIDKey = @"NJSponsorBlockVoteUserIDKey";
 static NSString * const NJSponsorBlockSkipTrackingEnabledKey = @"NJSponsorBlockSkipTrackingEnabledKey";
+static NSString * const NJSponsorBlockShowSegmentsInSeekbarWidgetKey = @"NJSponsorBlockShowSegmentsInSeekbarWidgetKey";
+static NSString * const NJSponsorBlockShowSegmentsInProgressWidgetKey = @"NJSponsorBlockShowSegmentsInProgressWidgetKey";
+static NSString * const NJSponsorBlockShowSharedEntryButtonKey = @"NJSponsorBlockShowSharedEntryButtonKey";
 
 static NSString * const NJSponsorBlockDefaultServerBaseURLString = @"https://bsbsb.top";
 static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.0.0.1:9876";
@@ -244,6 +247,36 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     [self postSettingsDidChangeNotification];
 }
 
++ (BOOL)showSegmentsInSeekbarWidget {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockShowSegmentsInSeekbarWidgetKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setShowSegmentsInSeekbarWidget:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowSegmentsInSeekbarWidgetKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (BOOL)showSegmentsInProgressWidget {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockShowSegmentsInProgressWidgetKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setShowSegmentsInProgressWidget:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowSegmentsInProgressWidgetKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (BOOL)showSharedEntryButton {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockShowSharedEntryButtonKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setShowSharedEntryButton:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowSharedEntryButtonKey];
+    [self postSettingsDidChangeNotification];
+}
+
 #pragma mark - Export / Import / Reset
 
 + (NSDictionary<NSString *, id> *)exportSettings {
@@ -323,6 +356,9 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockServerBaseURLKey];
     [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockCategoryActionsKey];
     [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockCategoryColorsKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowSegmentsInSeekbarWidgetKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowSegmentsInProgressWidgetKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowSharedEntryButtonKey];
     [NJ_SETTING_CACHE removeObjectForKey:NJ_SPONSOR_BLOCK_KEY];
     [self setSponsorBlockUserID:userID];
     [self postSettingsDidChangeNotification];

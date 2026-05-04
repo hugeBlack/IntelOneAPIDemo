@@ -15,6 +15,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     NJSponsorBlockSettingSectionGeneral = 0,
     NJSponsorBlockSettingSectionCache,
     NJSponsorBlockSettingSectionBehavior,
+    NJSponsorBlockSettingSectionUI,
     NJSponsorBlockSettingSectionCategories,
     NJSponsorBlockSettingSectionColors,
     NJSponsorBlockSettingSectionServer,
@@ -54,6 +55,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return 3;
         case NJSponsorBlockSettingSectionBehavior:
             return 3;
+        case NJSponsorBlockSettingSectionUI:
+            return 3;
         case NJSponsorBlockSettingSectionCategories:
             return [NJSponsorBlockSettings categoryOptions].count;
         case NJSponsorBlockSettingSectionColors:
@@ -77,6 +80,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return @"缓存管理";
         case NJSponsorBlockSettingSectionBehavior:
             return @"跳过行为";
+        case NJSponsorBlockSettingSectionUI:
+            return @"界面";
         case NJSponsorBlockSettingSectionCategories:
             return @"分类行为";
         case NJSponsorBlockSettingSectionColors:
@@ -154,6 +159,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             break;
         case NJSponsorBlockSettingSectionBehavior:
             [self configureBehaviorCell:cell row:indexPath.row];
+            break;
+        case NJSponsorBlockSettingSectionUI:
+            [self configureUICell:cell row:indexPath.row];
             break;
         case NJSponsorBlockSettingSectionCategories:
             [self configureCategoryCell:cell row:indexPath.row];
@@ -305,6 +313,22 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     [self presentViewController:confirm animated:YES completion:nil];
 }
 
+- (void)configureUICell:(UITableViewCell *)cell row:(NSInteger)row {
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    if (row == 0) {
+        cell.textLabel.text = @"在 SeekbarWidget 中显示片段";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSegmentsInSeekbarWidget] tag:105];
+        return;
+    }
+    if (row == 1) {
+        cell.textLabel.text = @"在 ProgressWidget 中显示片段";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSegmentsInProgressWidget] tag:106];
+        return;
+    }
+    cell.textLabel.text = @"播放器中显示 SponsorBlock 按钮";
+    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSharedEntryButton] tag:107];
+}
+
 - (void)configureBehaviorCell:(UITableViewCell *)cell row:(NSInteger)row {
     if (row == 0) {
         cell.textLabel.text = @"Seek 到片段内时跳过";
@@ -418,6 +442,12 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [NJSponsorBlockSettings setTestingServerEnabled:aSwitch.on];
     } else if (aSwitch.tag == 104) {
         [NJSponsorBlockSettings setSkipTrackingEnabled:aSwitch.on];
+    } else if (aSwitch.tag == 105) {
+        [NJSponsorBlockSettings setShowSegmentsInSeekbarWidget:aSwitch.on];
+    } else if (aSwitch.tag == 106) {
+        [NJSponsorBlockSettings setShowSegmentsInProgressWidget:aSwitch.on];
+    } else if (aSwitch.tag == 107) {
+        [NJSponsorBlockSettings setShowSharedEntryButton:aSwitch.on];
     }
     [self.tableView reloadData];
 }

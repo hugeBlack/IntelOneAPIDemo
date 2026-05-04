@@ -45,6 +45,7 @@ void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
 
 
     if (![NJSponsorBlockSettings enabled]) return;
+    if (![NJSponsorBlockSettings showSharedEntryButton]) return;
     Ivar rightControlWidgetIvar = rightControlWidgetIvars[classIndex];
 
     BBPlayerWidget* rightControlWidget = object_getIvar(self, rightControlWidgetIvar);
