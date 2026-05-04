@@ -66,6 +66,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, strong) UIButton *noticePrimaryButton;
 @property (nonatomic, strong) UIButton *noticeSecondaryButton;
 @property (nonatomic, strong) UIButton *noticeCloseButton;
+@property (nonatomic, strong) UIButton *closeButton;
 @property (nonatomic, strong) UIButton *toggleButton;
 @property (nonatomic, strong) UIButton *submitButton;
 @property (nonatomic, strong) UILabel *timeLabel;
@@ -690,6 +691,14 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.footerStack.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:self.footerStack];
 
+    self.closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.closeButton setTitle:@"✕" forState:UIControlStateNormal];
+    [self.closeButton setTitleColor:[UIColor colorWithWhite:0.72 alpha:1] forState:UIControlStateNormal];
+    self.closeButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    self.closeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.closeButton addTarget:self action:@selector(closePanelTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:self.closeButton];
+
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     pan.delegate = self;
     [self addGestureRecognizer:pan];
@@ -707,9 +716,14 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self.noticeSecondaryButton.widthAnchor constraintEqualToConstant:58],
         [self.noticeCloseButton.widthAnchor constraintEqualToConstant:24],
 
+        [self.closeButton.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
+        [self.closeButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8],
+        [self.closeButton.widthAnchor constraintEqualToConstant:28],
+        [self.closeButton.heightAnchor constraintEqualToConstant:28],
+
         [self.headerStack.topAnchor constraintEqualToAnchor:self.topAnchor constant:12],
         [self.headerStack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
-        [self.headerStack.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
+        [self.headerStack.trailingAnchor constraintEqualToAnchor:self.closeButton.leadingAnchor constant:-4],
 
         [self.noticeView.topAnchor constraintEqualToAnchor:self.headerStack.bottomAnchor constant:10],
         [self.noticeView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
@@ -1042,6 +1056,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     label.textAlignment = NSTextAlignmentCenter;
     [label.heightAnchor constraintEqualToConstant:NJSponsorBlockSegmentEmptyHeight].active = YES;
     return label;
+}
+
+- (void)closePanelTapped:(UIButton *)button {
+    [NJSponsorBlockPanelView hidePanelAnimated];
 }
 
 - (void)toggleEnabled {
