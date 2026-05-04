@@ -13,8 +13,6 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
 
 @interface NJSponsorBlockService ()
 
-- (NSMutableURLRequest *)sponsorBlockRequestWithURL:(NSURL *)url method:(NSString *)method timeout:(NSTimeInterval)timeout;
-- (NSURL *)requestURLWithHashPrefix:(NSString *)hashPrefix;
 - (NSArray<NSDictionary *> *)segmentDictionariesFromHashResponse:(id)json;
 - (NSSet<NSString *> *)supportedCategorySet;
 - (NSURL *)viewedSegmentURLWithUUID:(NSString *)uuid;
@@ -60,7 +58,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
     }
     
     (void)categories;
-    NSURL *url = [self requestURLWithHashPrefix:[[self class] hashPrefixForVideoID:videoID]];
+    NSURL *url = [[self class] apiURLWithPath:@"skipSegments" hashPrefix:[[self class] hashPrefixForVideoID:videoID]];
     if (!url) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:@"NJSponsorBlockService"
@@ -71,7 +69,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
         return;
     }
     
-    NSMutableURLRequest *request = [self sponsorBlockRequestWithURL:url method:@"GET" timeout:8];
+    NSMutableURLRequest *request = [[self class] sponsorBlockRequestWithURL:url method:@"GET" timeout:8];
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
@@ -144,7 +142,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
         return;
     }
 
-    NSMutableURLRequest *request = [self sponsorBlockRequestWithURL:url method:@"POST" timeout:5];
+    NSMutableURLRequest *request = [[self class] sponsorBlockRequestWithURL:url method:@"POST" timeout:5];
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(__unused NSData *data, __unused NSURLResponse *response, NSError *error) {
         if (error) {
             NSLog(@"[NJSponsorBlock] report viewed segment failed: %@", error);
@@ -175,7 +173,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
         return;
     }
 
-    NSMutableURLRequest *request = [self sponsorBlockRequestWithURL:url method:@"POST" timeout:8];
+    NSMutableURLRequest *request = [[self class] sponsorBlockRequestWithURL:url method:@"POST" timeout:8];
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(__unused NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             if (completion) {
@@ -249,7 +247,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
         return;
     }
 
-    NSMutableURLRequest *request = [self sponsorBlockRequestWithURL:url method:@"POST" timeout:10];
+    NSMutableURLRequest *request = [[self class] sponsorBlockRequestWithURL:url method:@"POST" timeout:10];
     request.HTTPBody = bodyData;
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
 
@@ -281,7 +279,18 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
     [task resume];
 }
 
-- (NSMutableURLRequest *)sponsorBlockRequestWithURL:(NSURL *)url method:(NSString *)method timeout:(NSTimeInterval)timeout {
++ (NSURL *)apiURLWithPath:(NSString *)path hashPrefix:(NSString *)hashPrefix {
+    if (path.length == 0 || hashPrefix.length == 0) {
+        return nil;
+    }
+
+    NSString *baseURLString = [NJSponsorBlockSettings serverBaseURLString];
+    NSString *separator = [baseURLString hasSuffix:@"/"] ? @"" : @"/";
+    NSString *urlString = [NSString stringWithFormat:@"%@%@api/%@/%@", baseURLString, separator, path, hashPrefix];
+    return [NSURL URLWithString:urlString];
+}
+
++ (NSMutableURLRequest *)sponsorBlockRequestWithURL:(NSURL *)url method:(NSString *)method timeout:(NSTimeInterval)timeout {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = method;
     request.timeoutInterval = timeout;
@@ -290,17 +299,6 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
     [request setValue:@"BiliBiliMApp" forHTTPHeaderField:@"x-ext-name"];
     [request setValue:@"1.0" forHTTPHeaderField:@"x-ext-version"];
     return request;
-}
-
-- (NSURL *)requestURLWithHashPrefix:(NSString *)hashPrefix {
-    if (hashPrefix.length == 0) {
-        return nil;
-    }
-
-    NSString *baseURLString = [NJSponsorBlockSettings serverBaseURLString];
-    NSString *separator = [baseURLString hasSuffix:@"/"] ? @"" : @"/";
-    NSString *urlString = [NSString stringWithFormat:@"%@%@api/skipSegments/%@", baseURLString, separator, hashPrefix];
-    return [NSURL URLWithString:urlString];
 }
 
 - (NSArray<NSDictionary *> *)segmentDictionariesFromHashResponse:(id)json {

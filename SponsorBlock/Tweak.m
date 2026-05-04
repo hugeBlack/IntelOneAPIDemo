@@ -15,4 +15,5 @@ __attribute__((constructor)) void TweakInit(void) {
     initSeekbarHooks();
     initPlayerWidgetButtonHooks();
     initViewReplyHooks();
+    initThumbnailBadgeHooks();
 }

@@ -18,6 +18,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     NJSponsorBlockSettingSectionUI,
     NJSponsorBlockSettingSectionCategories,
     NJSponsorBlockSettingSectionColors,
+    NJSponsorBlockSettingSectionThumbnailBadgeColors,
     NJSponsorBlockSettingSectionServer,
     NJSponsorBlockSettingSectionBackup,
     NJSponsorBlockSettingSectionAbout,
@@ -26,6 +27,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 
 @interface NJSponsorBlockSettingViewController () <NJSponsorBlockColorPickerDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, copy) NSString *editingColorCategory;
+@property (nonatomic, copy) NSString *editingThumbnailBadgeLabel;
 @property (nonatomic, assign) BOOL isImportingOptions;
 @end
 
@@ -56,11 +58,13 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         case NJSponsorBlockSettingSectionBehavior:
             return 3;
         case NJSponsorBlockSettingSectionUI:
-            return 3;
+            return 4;
         case NJSponsorBlockSettingSectionCategories:
             return [NJSponsorBlockSettings categoryOptions].count;
         case NJSponsorBlockSettingSectionColors:
             return [NJSponsorBlockSettings categoryOptions].count;
+        case NJSponsorBlockSettingSectionThumbnailBadgeColors:
+            return [NJSponsorBlockSettings thumbnailBadgeLabelOptions].count;
         case NJSponsorBlockSettingSectionServer:
             return 4;
         case NJSponsorBlockSettingSectionBackup:
@@ -86,6 +90,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return @"分类行为";
         case NJSponsorBlockSettingSectionColors:
             return @"行为颜色";
+        case NJSponsorBlockSettingSectionThumbnailBadgeColors:
+            return @"缩略图标签颜色";
         case NJSponsorBlockSettingSectionServer:
             return @"服务器";
         case NJSponsorBlockSettingSectionBackup:
@@ -105,7 +111,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         return @"导入/导出的选项以 JSON 格式保存，包含了您的私人用户 ID，请谨慎保管。";
     }
     if (section == NJSponsorBlockSettingSectionAbout) {
-        return @"当前 iOS 客户端支持官方插件的播放跳过、分类行为、服务器、缓存配置和基础片段投稿。投稿为移动端简化流程，不包含浏览器扩展的完整编辑器、快捷键、动态/评论屏蔽、缩略图标签等功能。";
+        return @"当前 iOS 客户端支持官方插件的播放跳过、分类行为、服务器、缓存配置、缩略图标签和基础片段投稿。投稿为移动端简化流程，不包含浏览器扩展的完整编辑器、快捷键、动态/评论屏蔽等功能。";
     }
     return nil;
 }
@@ -114,14 +120,19 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     if (section == NJSponsorBlockSettingSectionCache) {
         return [self cacheSectionFooterView];
     }
-    if (section != NJSponsorBlockSettingSectionColors) {
+    if (section != NJSponsorBlockSettingSectionColors && section != NJSponsorBlockSettingSectionThumbnailBadgeColors) {
         return nil;
     }
     UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 0, 44)];
     UIButton *resetButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [resetButton setTitle:@"恢复默认颜色" forState:UIControlStateNormal];
+    if (section == NJSponsorBlockSettingSectionColors) {
+        [resetButton setTitle:@"恢复默认行为颜色" forState:UIControlStateNormal];
+        [resetButton addTarget:self action:@selector(resetColorsTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else {
+        [resetButton setTitle:@"恢复默认缩略图标签颜色" forState:UIControlStateNormal];
+        [resetButton addTarget:self action:@selector(resetThumbnailBadgeColorsTapped) forControlEvents:UIControlEventTouchUpInside];
+    }
     resetButton.titleLabel.font = [UIFont systemFontOfSize:15];
-    [resetButton addTarget:self action:@selector(resetColorsTapped) forControlEvents:UIControlEventTouchUpInside];
     resetButton.translatesAutoresizingMaskIntoConstraints = NO;
     [footer addSubview:resetButton];
     [NSLayoutConstraint activateConstraints:@[
@@ -135,7 +146,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     if (section == NJSponsorBlockSettingSectionCache) {
         return UITableViewAutomaticDimension;
     }
-    if (section == NJSponsorBlockSettingSectionColors) {
+    if (section == NJSponsorBlockSettingSectionColors || section == NJSponsorBlockSettingSectionThumbnailBadgeColors) {
         return 44;
     }
     return UITableViewAutomaticDimension;
@@ -162,6 +173,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             break;
         case NJSponsorBlockSettingSectionUI:
             [self configureUICell:cell row:indexPath.row];
+            break;
+        case NJSponsorBlockSettingSectionThumbnailBadgeColors:
+            [self configureThumbnailBadgeColorCell:cell row:indexPath.row];
             break;
         case NJSponsorBlockSettingSectionCategories:
             [self configureCategoryCell:cell row:indexPath.row];
@@ -314,19 +328,27 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 }
 
 - (void)configureUICell:(UITableViewCell *)cell row:(NSInteger)row {
-    cell.selectionStyle = UITableViewCellSelectionStyleNone;
     if (row == 0) {
         cell.textLabel.text = @"在 SeekbarWidget 中显示片段";
         cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSegmentsInSeekbarWidget] tag:105];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return;
     }
     if (row == 1) {
         cell.textLabel.text = @"在 ProgressWidget 中显示片段";
         cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSegmentsInProgressWidget] tag:106];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return;
     }
-    cell.textLabel.text = @"播放器中显示 SponsorBlock 按钮";
-    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSharedEntryButton] tag:107];
+    if (row == 2) {
+        cell.textLabel.text = @"播放器中显示 SponsorBlock 按钮";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSharedEntryButton] tag:107];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return;
+    }
+    cell.textLabel.text = @"显示缩略图标签";
+    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showVideoLabels] tag:108];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
 }
 
 - (void)configureBehaviorCell:(UITableViewCell *)cell row:(NSInteger)row {
@@ -358,6 +380,18 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 - (void)configureColorCell:(UITableViewCell *)cell row:(NSInteger)row {
     NJSponsorBlockCategoryOption *option = [NJSponsorBlockSettings categoryOptions][row];
     UIColor *color = [NJSponsorBlockSettings colorForCategory:option.category];
+    cell.textLabel.text = option.title;
+    cell.imageView.image = [self circleImageWithColor:color size:22];
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+}
+
+- (void)configureThumbnailBadgeColorCell:(UITableViewCell *)cell row:(NSInteger)row {
+    NSArray<NJSponsorBlockCategoryOption *> *options = [NJSponsorBlockSettings thumbnailBadgeLabelOptions];
+    if (row >= options.count) {
+        return;
+    }
+    NJSponsorBlockCategoryOption *option = options[row];
+    UIColor *color = [NJSponsorBlockSettings thumbnailBadgeColorForLabel:option.category];
     cell.textLabel.text = option.title;
     cell.imageView.image = [self circleImageWithColor:color size:22];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -448,6 +482,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [NJSponsorBlockSettings setShowSegmentsInProgressWidget:aSwitch.on];
     } else if (aSwitch.tag == 107) {
         [NJSponsorBlockSettings setShowSharedEntryButton:aSwitch.on];
+    } else if (aSwitch.tag == 108) {
+        [NJSponsorBlockSettings setShowVideoLabels:aSwitch.on];
     }
     [self.tableView reloadData];
 }
@@ -464,6 +500,10 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [self presentNumberInputWithTitle:@"提前提示时间" value:[NJSponsorBlockSettings advanceNoticeDuration] handler:^(NSTimeInterval value) {
             [NJSponsorBlockSettings setAdvanceNoticeDuration:value];
         }];
+        return;
+    }
+    if (indexPath.section == NJSponsorBlockSettingSectionThumbnailBadgeColors) {
+        [self presentThumbnailBadgeColorPickerForRow:indexPath.row sourceCell:[tableView cellForRowAtIndexPath:indexPath]];
         return;
     }
     if (indexPath.section == NJSponsorBlockSettingSectionCategories) {
@@ -832,6 +872,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 - (void)presentColorPickerForRow:(NSInteger)row sourceCell:(UITableViewCell *)sourceCell {
     NJSponsorBlockCategoryOption *option = [NJSponsorBlockSettings categoryOptions][row];
     self.editingColorCategory = option.category;
+    self.editingThumbnailBadgeLabel = nil;
     UIColor *currentColor = [NJSponsorBlockSettings colorForCategory:option.category];
     NJSponsorBlockColorPickerController *picker = [[NJSponsorBlockColorPickerController alloc] initWithColor:currentColor categoryTitle:option.title];
     picker.delegate = self;
@@ -840,9 +881,32 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     [self presentViewController:nav animated:YES completion:nil];
 }
 
+- (void)presentThumbnailBadgeColorPickerForRow:(NSInteger)row sourceCell:(UITableViewCell *)sourceCell {
+    NSArray<NJSponsorBlockCategoryOption *> *options = [NJSponsorBlockSettings thumbnailBadgeLabelOptions];
+    if (row >= options.count) {
+        return;
+    }
+    NJSponsorBlockCategoryOption *option = options[row];
+    self.editingColorCategory = nil;
+    self.editingThumbnailBadgeLabel = option.category;
+    UIColor *currentColor = [NJSponsorBlockSettings thumbnailBadgeColorForLabel:option.category];
+    NJSponsorBlockColorPickerController *picker = [[NJSponsorBlockColorPickerController alloc] initWithColor:currentColor categoryTitle:option.title];
+    picker.delegate = self;
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:picker];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
 - (void)colorPickerDidSelectColor:(UIColor *)color {
+    if (self.editingThumbnailBadgeLabel) {
+        [NJSponsorBlockSettings setThumbnailBadgeColor:color forLabel:self.editingThumbnailBadgeLabel];
+        self.editingThumbnailBadgeLabel = nil;
+        [self.tableView reloadData];
+        return;
+    }
     if (self.editingColorCategory) {
         [NJSponsorBlockSettings setColor:color forCategory:self.editingColorCategory];
+        self.editingColorCategory = nil;
         [self.tableView reloadData];
     }
 }
@@ -853,6 +917,17 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"恢复" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         [NJSponsorBlockSettings resetColors];
+        [weakSelf.tableView reloadData];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)resetThumbnailBadgeColorsTapped {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"恢复默认缩略图标签颜色" message:@"确定将所有缩略图标签颜色恢复为默认值？" preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
+        [NJSponsorBlockSettings resetThumbnailBadgeColors];
         [weakSelf.tableView reloadData];
     }]];
     [self presentViewController:alert animated:YES completion:nil];

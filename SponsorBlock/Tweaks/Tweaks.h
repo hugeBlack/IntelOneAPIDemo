@@ -36,3 +36,4 @@ void initPlayerWidgetButtonHooks(void);
 void initViewReplyHooks(void);
 void initSettingsHooks(void);
 void initSeekbarHooks(void);
+void initThumbnailBadgeHooks(void);

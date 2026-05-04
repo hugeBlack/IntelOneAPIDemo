@@ -49,8 +49,11 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockCategoryAction) {
 + (void)setShowSegmentsInProgressWidget:(BOOL)enabled;
 + (BOOL)showSharedEntryButton;
 + (void)setShowSharedEntryButton:(BOOL)enabled;
++ (BOOL)showVideoLabels;
++ (void)setShowVideoLabels:(BOOL)enabled;
 
 + (NSArray<NJSponsorBlockCategoryOption *> *)categoryOptions;
++ (NSArray<NJSponsorBlockCategoryOption *> *)thumbnailBadgeLabelOptions;
 + (NSArray<NSString *> *)requestCategories;
 + (NJSponsorBlockCategoryAction)actionForCategory:(NSString *)category;
 + (void)setAction:(NJSponsorBlockCategoryAction)action forCategory:(NSString *)category;
@@ -75,6 +78,13 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockCategoryAction) {
 
 + (NSString *)requestConfigurationIdentifier;
 + (void)postSettingsDidChangeNotification;
+
+#pragma mark - Thumbnail Badge Color
+
++ (UIColor *)thumbnailBadgeColorForLabel:(NSString *)label;
++ (UIColor *)defaultThumbnailBadgeColorForLabel:(NSString *)label;
++ (void)setThumbnailBadgeColor:(UIColor *)color forLabel:(NSString *)label;
++ (void)resetThumbnailBadgeColors;
 
 @end
 

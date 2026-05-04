@@ -24,6 +24,8 @@ static NSString * const NJSponsorBlockSkipTrackingEnabledKey = @"NJSponsorBlockS
 static NSString * const NJSponsorBlockShowSegmentsInSeekbarWidgetKey = @"NJSponsorBlockShowSegmentsInSeekbarWidgetKey";
 static NSString * const NJSponsorBlockShowSegmentsInProgressWidgetKey = @"NJSponsorBlockShowSegmentsInProgressWidgetKey";
 static NSString * const NJSponsorBlockShowSharedEntryButtonKey = @"NJSponsorBlockShowSharedEntryButtonKey";
+static NSString * const NJSponsorBlockShowVideoLabelsKey = @"NJSponsorBlockShowVideoLabelsKey";
+static NSString * const NJSponsorBlockThumbnailBadgeColorsKey = @"NJSponsorBlockThumbnailBadgeColorsKey";
 
 static NSString * const NJSponsorBlockDefaultServerBaseURLString = @"https://bsbsb.top";
 static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.0.0.1:9876";
@@ -153,6 +155,13 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     ];
 }
 
++ (NSArray<NJSponsorBlockCategoryOption *> *)thumbnailBadgeLabelOptions {
+    return @[
+        [[NJSponsorBlockCategoryOption alloc] initWithCategory:@"sponsor" title:@"推广"],
+        [[NJSponsorBlockCategoryOption alloc] initWithCategory:@"exclusive_access" title:@"独家"],
+    ];
+}
+
 + (NSArray<NSString *> *)requestCategories {
     NSMutableArray<NSString *> *categories = [NSMutableArray array];
     for (NJSponsorBlockCategoryOption *option in [self categoryOptions]) {
@@ -277,6 +286,16 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     [self postSettingsDidChangeNotification];
 }
 
++ (BOOL)showVideoLabels {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockShowVideoLabelsKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setShowVideoLabels:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowVideoLabelsKey];
+    [self postSettingsDidChangeNotification];
+}
+
 #pragma mark - Export / Import / Reset
 
 + (NSDictionary<NSString *, id> *)exportSettings {
@@ -286,14 +305,19 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     dict[@"skipOnSeekToSegment"] = @([self skipOnSeekToSegment]);
     dict[@"testingServerEnabled"] = @([self testingServerEnabled]);
     dict[@"skipTrackingEnabled"] = @([self skipTrackingEnabled]);
+    dict[@"showVideoLabels"] = @([self showVideoLabels]);
     dict[@"minDuration"] = @([self minDuration]);
     dict[@"advanceNoticeDuration"] = @([self advanceNoticeDuration]);
-    NSString *serverURL = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockServerBaseURLKey];
+    NSString *serverURL = (NSString *)[NJ_SETTING_CACHE objectForKey:NJSponsorBlockServerBaseURLKey];
     if (serverURL) {
         dict[@"serverBaseURL"] = serverURL;
     }
     dict[@"categoryActions"] = [self categoryActions];
     dict[@"categoryColors"] = [self categoryColors];
+    NSDictionary *thumbnailBadgeColors = (NSDictionary *)[NJ_SETTING_CACHE objectForKey:NJSponsorBlockThumbnailBadgeColorsKey];
+    if ([thumbnailBadgeColors isKindOfClass:[NSDictionary class]]) {
+        dict[@"thumbnailBadgeColors"] = thumbnailBadgeColors;
+    }
     dict[@"userID"] = [self sponsorBlockUserID];
     return [dict copy];
 }
@@ -317,6 +341,9 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     if (settings[@"skipTrackingEnabled"]) {
         [self setSkipTrackingEnabled:[settings[@"skipTrackingEnabled"] boolValue]];
     }
+    if (settings[@"showVideoLabels"]) {
+        [self setShowVideoLabels:[settings[@"showVideoLabels"] boolValue]];
+    }
     if (settings[@"minDuration"]) {
         [self setMinDuration:[settings[@"minDuration"] doubleValue]];
     }
@@ -336,6 +363,9 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     }
     if ([settings[@"categoryColors"] isKindOfClass:[NSDictionary class]]) {
         [NJ_SETTING_CACHE setObject:settings[@"categoryColors"] forKey:NJSponsorBlockCategoryColorsKey];
+    }
+    if ([settings[@"thumbnailBadgeColors"] isKindOfClass:[NSDictionary class]]) {
+        [NJ_SETTING_CACHE setObject:settings[@"thumbnailBadgeColors"] forKey:NJSponsorBlockThumbnailBadgeColorsKey];
     }
     if ([settings[@"userID"] isKindOfClass:[NSString class]] && [settings[@"userID"] length] > 0) {
         [self setSponsorBlockUserID:settings[@"userID"]];
@@ -359,6 +389,8 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
     [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowSegmentsInSeekbarWidgetKey];
     [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowSegmentsInProgressWidgetKey];
     [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowSharedEntryButtonKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockShowVideoLabelsKey];
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockThumbnailBadgeColorsKey];
     [NJ_SETTING_CACHE removeObjectForKey:NJ_SPONSOR_BLOCK_KEY];
     [self setSponsorBlockUserID:userID];
     [self postSettingsDidChangeNotification];
@@ -484,6 +516,45 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
 + (NSDictionary<NSString *, NSString *> *)categoryColors {
     id colors = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockCategoryColorsKey];
     return [colors isKindOfClass:[NSDictionary class]] ? colors : @{};
+}
+
+#pragma mark - Thumbnail Badge Colors
+
++ (UIColor *)thumbnailBadgeColorForLabel:(NSString *)label {
+    NSDictionary *colors = (NSDictionary *)[NJ_SETTING_CACHE objectForKey:NJSponsorBlockThumbnailBadgeColorsKey];
+    if ([colors isKindOfClass:[NSDictionary class]]) {
+        UIColor *color = [self colorFromHexString:colors[label]];
+        if (color) {
+            return color;
+        }
+    }
+    return [self defaultThumbnailBadgeColorForLabel:label];
+}
+
++ (UIColor *)defaultThumbnailBadgeColorForLabel:(NSString *)label {
+    return [[UIColor blackColor] colorWithAlphaComponent:0.72];
+}
+
++ (void)setThumbnailBadgeColor:(UIColor *)color forLabel:(NSString *)label {
+    if (label.length == 0) {
+        return;
+    }
+    NSMutableDictionary *colors = [(NSDictionary *)[NJ_SETTING_CACHE objectForKey:NJSponsorBlockThumbnailBadgeColorsKey] mutableCopy];
+    if (!colors) {
+        colors = [NSMutableDictionary dictionary];
+    }
+    if (color) {
+        colors[label] = [self hexStringFromColor:color];
+    } else {
+        [colors removeObjectForKey:label];
+    }
+    [NJ_SETTING_CACHE setObject:[colors copy] forKey:NJSponsorBlockThumbnailBadgeColorsKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (void)resetThumbnailBadgeColors {
+    [NJ_SETTING_CACHE removeObjectForKey:NJSponsorBlockThumbnailBadgeColorsKey];
+    [self postSettingsDidChangeNotification];
 }
 
 @end
