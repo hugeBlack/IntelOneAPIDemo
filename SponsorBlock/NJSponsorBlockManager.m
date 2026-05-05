@@ -8,6 +8,7 @@
 #import "NJSponsorBlockService.h"
 #import "NJSponsorBlockSettings.h"
 #import "NJSponsorBlockCacheStats.h"
+#import "NJSponsorBlockUnsubmittedSegmentStore.h"
 #import "NJCommonDefine.h"
 #import "NJSettingCache.h"
 #import <math.h>
@@ -75,6 +76,18 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 - (void)invalidateCachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid;
 - (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message;
+- (void)clearSkipStateForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
+- (void)submitStoredSegment:(NJSponsorBlockSegment *)segment
+                    videoID:(NSString *)videoID
+                        cid:(NSInteger)cid
+                   duration:(NSTimeInterval)duration
+                 completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
+- (void)submitUnsubmittedSegments:(NSArray<NJSponsorBlockSegment *> *)segments
+                          videoID:(NSString *)videoID
+                              cid:(NSInteger)cid
+                         duration:(NSTimeInterval)duration
+                            index:(NSUInteger)index
+                       completion:(nullable NJSponsorBlockSubmitCompletion)completion;
 
 @end
 
@@ -208,10 +221,21 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 }
 
 - (NSArray<NJSponsorBlockSegment *> *)allSegments {
-    if (![NJSponsorBlockSettings enabled] || self.segments.count == 0) {
+    if (![NJSponsorBlockSettings enabled]) {
         return @[];
     }
-    return self.segments;
+
+    NSArray<NJSponsorBlockSegment *> *localSegments = [self unsubmittedSegmentsForCurrentVideo];
+    if (self.segments.count == 0) {
+        return localSegments;
+    }
+    if (localSegments.count == 0) {
+        return self.segments;
+    }
+
+    NSMutableArray<NJSponsorBlockSegment *> *segments = [self.segments mutableCopy];
+    [segments addObjectsFromArray:localSegments];
+    return [segments copy];
 }
 
 - (NSArray<NJSponsorBlockSegment *> *)displaySegments {
@@ -366,7 +390,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 }
 
 - (void)reportSegmentSkipped:(NJSponsorBlockSegment *)segment {
-    if (segment.uuid.length == 0 || ![NJSponsorBlockSettings skipTrackingEnabled]) {
+    if (segment.uuid.length == 0 || segment.isUnsubmitted || ![NJSponsorBlockSettings skipTrackingEnabled]) {
         return;
     }
     if (segment.actionType.length == 0 || [segment.actionType isEqualToString:@"skip"]) {
@@ -374,13 +398,18 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     }
 }
 
-- (void)submitSegmentWithCategory:(NSString *)category
-                       actionType:(NSString *)actionType
-                          segment:(NSArray<NSNumber *> *)segment
-                       completion:(NJSponsorBlockSubmitCompletion)completion {
+- (void)submitUnsubmittedSegmentsForCurrentVideoWithCompletion:(NJSponsorBlockSubmitCompletion)completion {
     if (self.videoID.length == 0 || self.cid <= 0) {
         if (completion) {
             completion(NO, [self submissionErrorWithCode:-1 message:@"尚未识别当前视频"]);
+        }
+        return;
+    }
+
+    NSArray<NJSponsorBlockSegment *> *segments = [self unsubmittedSegmentsForCurrentVideo];
+    if (segments.count == 0) {
+        if (completion) {
+            completion(NO, [self submissionErrorWithCode:-4 message:@"当前视频没有未提交片段"]);
         }
         return;
     }
@@ -393,40 +422,109 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
         return;
     }
 
-    NSString *videoID = self.videoID;
-    NSInteger cid = self.cid;
-    __weak typeof(self) weakSelf = self;
-    [self.service submitSegmentWithVideoID:videoID
-                                       cid:cid
-                                  category:category
-                                actionType:actionType
-                                   segment:segment
-                             videoDuration:duration
-                                completion:^(BOOL success, NSError *error) {
-        if (!success) {
-            if (completion) {
-                completion(NO, error);
-            }
-            return;
-        }
+    [self submitUnsubmittedSegments:segments
+                             videoID:self.videoID
+                                 cid:self.cid
+                            duration:duration
+                               index:0
+                          completion:completion];
+}
 
+- (void)submitUnsubmittedSegments:(NSArray<NJSponsorBlockSegment *> *)segments
+                          videoID:(NSString *)videoID
+                              cid:(NSInteger)cid
+                         duration:(NSTimeInterval)duration
+                            index:(NSUInteger)index
+                       completion:(NJSponsorBlockSubmitCompletion)completion {
+    if (index >= segments.count) {
+        [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] removeSegmentsForVideoID:videoID cid:cid];
+        [self clearSkipStateForSegments:segments];
+        [self invalidateCachedSegmentsForVideoID:videoID cid:cid];
+        self.segments = @[];
+        [self postStateChangedNotification];
+        [self loadSegmentsForCurrentVideoIfNeeded];
+        if (completion) {
+            completion(YES, nil);
+        }
+        return;
+    }
+
+    NJSponsorBlockSegment *segment = segments[index];
+    __weak typeof(self) weakSelf = self;
+    [self submitStoredSegment:segment videoID:videoID cid:cid duration:duration completion:^(BOOL success, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf || ![strongSelf.videoID isEqualToString:videoID] || strongSelf.cid != cid) {
+            if (!strongSelf) {
                 if (completion) {
-                    completion(YES, nil);
+                    NSError *staleError = [NSError errorWithDomain:@"NJSponsorBlockManager"
+                                                              code:-5
+                                                          userInfo:@{NSLocalizedDescriptionKey: @"提交状态已失效"}];
+                    completion(NO, staleError);
                 }
                 return;
             }
-            [strongSelf invalidateCachedSegmentsForVideoID:videoID cid:cid];
-            strongSelf.segments = @[];
-            [strongSelf postStateChangedNotification];
-            [strongSelf loadSegmentsForCurrentVideoIfNeeded];
-            if (completion) {
-                completion(YES, nil);
+            if (!success) {
+                if (completion) {
+                    completion(NO, error);
+                }
+                return;
             }
+            [strongSelf submitUnsubmittedSegments:segments
+                                          videoID:videoID
+                                              cid:cid
+                                         duration:duration
+                                            index:index + 1
+                                       completion:completion];
         });
     }];
+}
+
+- (void)submitStoredSegment:(NJSponsorBlockSegment *)segment
+                    videoID:(NSString *)videoID
+                        cid:(NSInteger)cid
+                   duration:(NSTimeInterval)duration
+                 completion:(void (^)(BOOL success, NSError *error))completion {
+    NSArray<NSNumber *> *values = [segment.actionType isEqualToString:@"poi"] ? @[@(segment.startTime)] : @[@(segment.startTime), @(segment.endTime)];
+    [self.service submitSegmentWithVideoID:videoID
+                                       cid:cid
+                                  category:segment.category
+                                actionType:segment.actionType
+                                   segment:values
+                             videoDuration:duration
+                                completion:completion];
+}
+
+- (NJSponsorBlockSegment *)addUnsubmittedSegmentWithCategory:(NSString *)category
+                                                  actionType:(NSString *)actionType
+                                                     segment:(NSArray<NSNumber *> *)segment {
+    NJSponsorBlockSegment *localSegment = [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] addSegmentForVideoID:self.videoID
+                                                                                                               cid:self.cid
+                                                                                                          category:category
+                                                                                                        actionType:actionType
+                                                                                                           segment:segment
+                                                                                                     videoDuration:self.estimatedVideoDuration];
+    if (localSegment) {
+        [self postStateChangedNotification];
+    }
+    return localSegment;
+}
+
+- (NSArray<NJSponsorBlockSegment *> *)unsubmittedSegmentsForCurrentVideo {
+    return [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] segmentsForVideoID:self.videoID cid:self.cid];
+}
+
+- (void)clearUnsubmittedSegmentsForCurrentVideo {
+    NSArray<NJSponsorBlockSegment *> *segments = [self unsubmittedSegmentsForCurrentVideo];
+    [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] removeSegmentsForVideoID:self.videoID cid:self.cid];
+    [self clearSkipStateForSegments:segments];
+    [self postStateChangedNotification];
+}
+
+- (void)clearAllUnsubmittedSegments {
+    NSArray<NJSponsorBlockSegment *> *segments = [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] allSegments];
+    [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] clearAllSegments];
+    [self clearSkipStateForSegments:segments];
+    [self postStateChangedNotification];
 }
 
 - (BOOL)hasSkippedSegment:(NJSponsorBlockSegment *)segment {
@@ -464,7 +562,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 
 - (NSTimeInterval)estimatedVideoDuration {
     NSTimeInterval duration = self.nativeVideoDuration;
-    for (NJSponsorBlockSegment *segment in self.segments) {
+    for (NJSponsorBlockSegment *segment in [self allSegments]) {
         duration = MAX(duration, segment.videoDuration);
         duration = MAX(duration, segment.endTime);
     }
@@ -558,6 +656,19 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     }
     [self.trackedCacheKeys removeAllObjects];
     [[NJSponsorBlockCacheStats sharedInstance] clearAll];
+}
+
+- (void)clearSkipStateForSegments:(NSArray<NJSponsorBlockSegment *> *)segments {
+    for (NJSponsorBlockSegment *segment in segments) {
+        if (segment.uuid.length == 0) {
+            continue;
+        }
+        [self.skippedUUIDs removeObject:segment.uuid];
+        [self.actualSkippedUUIDs removeObject:segment.uuid];
+        if ([self.lastSkippedSegment.uuid isEqualToString:segment.uuid]) {
+            self.lastSkippedSegment = nil;
+        }
+    }
 }
 
 - (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments {

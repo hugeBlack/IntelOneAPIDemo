@@ -10,6 +10,7 @@
 #import "NJSponsorBlockSegment.h"
 #import "NJSponsorBlockService.h"
 #import "NJSponsorBlockSettings.h"
+#import "NJSponsorBlockSubmissionManagerViewController.h"
 #import <float.h>
 #import <math.h>
 #import <objc/runtime.h>
@@ -100,12 +101,16 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 - (NJSponsorBlockSegment *)segmentFromSender:(id)sender;
 - (void)voteForSegment:(NJSponsorBlockSegment *)segment type:(NSInteger)type;
 - (void)submitSegmentTapped:(UIButton *)button;
+- (void)presentSubmissionMenuFromView:(UIView *)sourceView;
+- (BOOL)validateCurrentVideoForDraftCreation;
 - (void)presentSubmissionCategoryPickerFromView:(UIView *)sourceView;
+- (void)presentSubmissionManager;
+- (void)submitCurrentVideoDraftsFromPanel;
 - (void)beginSubmissionWithCategory:(NSString *)category;
 - (void)confirmPOISubmissionWithCategory:(NSString *)category sourceView:(UIView *)sourceView;
 - (void)finishSubmissionAtCurrentTime;
 - (void)cancelSubmissionDraft;
-- (void)submitSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType clearDraftOnSuccess:(BOOL)clearDraftOnSuccess;
+- (void)saveDraftSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType;
 - (BOOL)currentPlaybackTimeIsValid:(NSTimeInterval)time;
 - (NSArray<NSNumber *> *)roundedSegmentFromStart:(NSTimeInterval)start end:(NSTimeInterval)end;
 - (NSNumber *)roundedTimeNumber:(NSTimeInterval)time;
@@ -123,7 +128,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 static NJSponsorBlockOverlayWindow *NJSponsorBlockSharedOverlayWindow;
 static UIViewController *NJSponsorBlockSharedOverlayController;
 static NSHashTable<UIView *> *NJSponsorBlockNativeTimelineViews;
-static __weak UIView *NJSponsorBlockEntryAnchorView;
 static NSTimeInterval NJSponsorBlockLastPlaybackActiveTime;
 static void *NJSponsorBlockNativeTimelineKey = &NJSponsorBlockNativeTimelineKey;
 static void *NJSponsorBlockManualSkipSegmentKey = &NJSponsorBlockManualSkipSegmentKey;
@@ -450,21 +454,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     CGRect bounds = view.bounds;
     BOOL portrait = CGRectGetHeight(bounds) >= CGRectGetWidth(bounds);
 
-    UIView *anchorView = NJSponsorBlockEntryAnchorView;
-    if (anchorView && !anchorView.hidden && anchorView.alpha > 0.01 && anchorView.window) {
-        CGRect anchorFrame = [anchorView convertRect:anchorView.bounds toView:nil];
-        CGFloat x = CGRectGetMinX(anchorFrame) - 44.0;
-        CGFloat y = CGRectGetMidY(anchorFrame) - 19.0;
-        CGFloat maxX = CGRectGetWidth(bounds) - insets.right - 38.0 - 4.0;
-        CGFloat maxY = CGRectGetHeight(bounds) - insets.bottom - 38.0 - 4.0;
-        button.frame = CGRectMake(MIN(MAX(insets.left + 4.0, x), maxX),
-                                  MIN(MAX(insets.top + 4.0, y), maxY),
-                                  38.0,
-                                  38.0);
-        return;
-    }
-
-    CGFloat x = portrait ? CGRectGetWidth(bounds) - insets.right - 132.0 : CGRectGetWidth(bounds) - insets.right - 132.0;
+    CGFloat x = CGRectGetWidth(bounds) - insets.right - 132.0;
     CGFloat y = portrait ? insets.top + 64.0 : insets.top + 22.0;
     button.frame = CGRectMake(MAX(insets.left + 8.0, x), y, 38.0, 38.0);
 }
@@ -507,7 +497,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         CGFloat startX = MAX(0, MIN(width, width * segment.startTime / duration));
         CGFloat endX = MAX(startX + 2.0, MIN(width, width * segment.endTime / duration));
         UIView *mark = [[UIView alloc] initWithFrame:CGRectMake(startX, 0, endX - startX, height)];
-        mark.backgroundColor = [self colorForCategory:segment.category];
+        mark.backgroundColor = segment.isUnsubmitted ? [[self colorForCategory:segment.category] colorWithAlphaComponent:0.48] : [self colorForCategory:segment.category];
+        if (segment.isUnsubmitted) {
+            mark.layer.borderWidth = 1.0;
+            mark.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.75].CGColor;
+        }
         [timeline addSubview:mark];
     }
 
@@ -966,7 +960,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         CGFloat startX = MAX(0, MIN(width, width * segment.startTime / duration));
         CGFloat endX = MAX(startX + 2.0, MIN(width, width * segment.endTime / duration));
         UIView *mark = [[UIView alloc] initWithFrame:CGRectMake(startX, 0, endX - startX, 6.0)];
-        mark.backgroundColor = [[self class] colorForCategory:segment.category];
+        mark.backgroundColor = segment.isUnsubmitted ? [[[self class] colorForCategory:segment.category] colorWithAlphaComponent:0.48] : [[self class] colorForCategory:segment.category];
+        if (segment.isUnsubmitted) {
+            mark.layer.borderWidth = 1.0;
+            mark.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.75].CGColor;
+        }
         mark.userInteractionEnabled = YES;
         objc_setAssociatedObject(mark, NJSponsorBlockPanelSegmentKey, segment, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [mark addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(progressSegmentTapped:)]];
@@ -999,12 +997,13 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
     NJSponsorBlockCategoryAction action = [NJSponsorBlockSettings actionForCategory:segment.category];
     UILabel *categoryLabel = [[UILabel alloc] init];
-    categoryLabel.text = [NSString stringWithFormat:@"%@ · %@", [self titleForCategory:segment.category], [NJSponsorBlockSettings titleForAction:action]];
+    NSString *categoryText = [NSString stringWithFormat:@"%@ · %@", [self titleForCategory:segment.category], [NJSponsorBlockSettings titleForAction:action]];
+    categoryLabel.text = segment.isUnsubmitted ? [@"未提交 · " stringByAppendingString:categoryText] : categoryText;
     categoryLabel.textColor = UIColor.whiteColor;
     categoryLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
     categoryLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
-    NSString *stateText = active ? @"播放中" : (skipped ? @"已跳过" : @"已加载");
+    NSString *stateText = segment.isUnsubmitted ? @"未提交" : (active ? @"播放中" : (skipped ? @"已跳过" : @"已加载"));
     UILabel *detailLabel = [[UILabel alloc] init];
     detailLabel.text = [NSString stringWithFormat:@"%@ · %@", stateText, [self detailTextForSegment:segment currentTime:currentTime]];
     detailLabel.textColor = [UIColor colorWithWhite:0.80 alpha:1];
@@ -1020,13 +1019,17 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     UIColor *green = [UIColor colorWithRed:0.00 green:0.62 blue:0.18 alpha:0.95];
     UIColor *red = [UIColor colorWithRed:0.86 green:0.22 blue:0.18 alpha:0.95];
     UIColor *gray = [UIColor colorWithWhite:0.32 alpha:0.95];
-    UIStackView *buttonStack = [[UIStackView alloc] initWithArrangedSubviews:@[
+    NSArray<UIView *> *buttons = segment.isUnsubmitted ? @[
+        [self actionButtonWithTitle:@"起点" color:gray action:@selector(seekToSegmentStartTapped:) segment:segment],
+        [self actionButtonWithTitle:@"跳过" color:blue action:@selector(skipSegmentTapped:) segment:segment],
+    ] : @[
         [self actionButtonWithTitle:@"起点" color:gray action:@selector(seekToSegmentStartTapped:) segment:segment],
         [self actionButtonWithTitle:@"跳过" color:blue action:@selector(skipSegmentTapped:) segment:segment],
         [self actionButtonWithTitle:@"赞" color:green action:@selector(upvoteSegmentTapped:) segment:segment],
         [self actionButtonWithTitle:@"踩" color:red action:@selector(downvoteSegmentTapped:) segment:segment],
         [self actionButtonWithTitle:@"复制" color:gray action:@selector(copySegmentUUIDTapped:) segment:segment],
-    ]];
+    ];
+    UIStackView *buttonStack = [[UIStackView alloc] initWithArrangedSubviews:buttons];
     buttonStack.axis = UILayoutConstraintAxisHorizontal;
     buttonStack.alignment = UIStackViewAlignmentCenter;
     buttonStack.distribution = UIStackViewDistributionFillEqually;
@@ -1081,21 +1084,60 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
-    if (manager.videoID.length == 0 || manager.cid <= 0) {
-        [self showTransientMessage:@"无法提交" detail:@"尚未识别当前视频"];
-        return;
-    }
-    if (![self currentPlaybackTimeIsValid:manager.currentPlaybackTime]) {
-        [self showTransientMessage:@"无法提交" detail:@"无法获取当前播放时间"];
-        return;
-    }
-    if (manager.estimatedVideoDuration <= 0 || !isfinite(manager.estimatedVideoDuration)) {
-        [self showTransientMessage:@"无法提交" detail:@"暂未获取视频时长，稍后再试"];
+    [self presentSubmissionMenuFromView:button];
+}
+
+- (void)presentSubmissionMenuFromView:(UIView *)sourceView {
+    UIViewController *presenter = [self presentationViewController];
+    if (!presenter) {
+        [self showTransientMessage:@"无法提交" detail:@"无法打开提交菜单"];
         return;
     }
 
-    [self presentSubmissionCategoryPickerFromView:button];
+    NSUInteger draftCount = [NJSponsorBlockManager sharedInstance].unsubmittedSegmentsForCurrentVideo.count;
+    NSString *message = draftCount > 0 ? [NSString stringWithFormat:@"当前视频有 %lu 个未提交片段", (unsigned long)draftCount] : @"可保存新草稿或管理已有草稿";
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"片段提交" message:message preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"新增片段草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || ![strongSelf validateCurrentVideoForDraftCreation]) {
+            return;
+        }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [strongSelf presentSubmissionCategoryPickerFromView:sourceView];
+        });
+    }]];
+    UIAlertAction *submitAction = [UIAlertAction actionWithTitle:@"提交当前视频草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        [weakSelf submitCurrentVideoDraftsFromPanel];
+    }];
+    submitAction.enabled = draftCount > 0;
+    [alert addAction:submitAction];
+    [alert addAction:[UIAlertAction actionWithTitle:@"管理未提交片段" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [weakSelf presentSubmissionManager];
+        });
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    alert.popoverPresentationController.sourceView = sourceView ?: self;
+    alert.popoverPresentationController.sourceRect = sourceView ? sourceView.bounds : self.bounds;
+    [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+- (BOOL)validateCurrentVideoForDraftCreation {
+    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    if (manager.videoID.length == 0 || manager.cid <= 0) {
+        [self showTransientMessage:@"无法提交" detail:@"尚未识别当前视频"];
+        return NO;
+    }
+    if (![self currentPlaybackTimeIsValid:manager.currentPlaybackTime]) {
+        [self showTransientMessage:@"无法提交" detail:@"无法获取当前播放时间"];
+        return NO;
+    }
+    if (manager.estimatedVideoDuration <= 0 || !isfinite(manager.estimatedVideoDuration)) {
+        [self showTransientMessage:@"无法提交" detail:@"暂未获取视频时长，稍后再试"];
+        return NO;
+    }
+    return YES;
 }
 
 - (void)presentSubmissionCategoryPickerFromView:(UIView *)sourceView {
@@ -1105,8 +1147,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提交片段"
-                                                                   message:@"选择本次提交的片段分类"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新增片段草稿"
+                                                                   message:@"选择本次草稿的片段分类"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     __weak typeof(self) weakSelf = self;
     for (NJSponsorBlockCategoryOption *option in [NJSponsorBlockSettings categoryOptions]) {
@@ -1128,6 +1170,39 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     alert.popoverPresentationController.sourceView = sourceView ?: self;
     alert.popoverPresentationController.sourceRect = sourceView ? sourceView.bounds : self.bounds;
     [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentSubmissionManager {
+    UIViewController *presenter = [self presentationViewController];
+    if (!presenter) {
+        [self showTransientMessage:@"无法打开" detail:@"无法打开未提交片段管理"];
+        return;
+    }
+    NJSponsorBlockSubmissionManagerViewController *controller = [[NJSponsorBlockSubmissionManagerViewController alloc] init];
+    UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:controller];
+    navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
+    [presenter presentViewController:navigationController animated:YES completion:nil];
+}
+
+- (void)submitCurrentVideoDraftsFromPanel {
+    if (self.submissionRequestInFlight) {
+        return;
+    }
+    self.submissionRequestInFlight = YES;
+    [self refreshContent];
+    __weak typeof(self) weakSelf = self;
+    [[NJSponsorBlockManager sharedInstance] submitUnsubmittedSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+            strongSelf.submissionRequestInFlight = NO;
+            [strongSelf showTransientMessage:(success ? @"提交成功" : @"提交失败")
+                                      detail:(success ? @"当前视频草稿已提交" : (error.localizedDescription ?: @"请稍后重试"))];
+            [strongSelf refreshContent];
+        });
+    }];
 }
 
 - (void)beginSubmissionWithCategory:(NSString *)category {
@@ -1174,10 +1249,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    NSString *message = [NSString stringWithFormat:@"提交当前时间 %@ 为精彩片段", [self stringFromTime:currentTime]];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提交精彩片段" message:message preferredStyle:UIAlertControllerStyleActionSheet];
+    NSString *message = [NSString stringWithFormat:@"保存当前时间 %@ 为精彩片段草稿", [self stringFromTime:currentTime]];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"保存精彩片段草稿" message:message preferredStyle:UIAlertControllerStyleActionSheet];
     __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"提交当前时间点" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"保存草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
             return;
@@ -1187,10 +1262,9 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
             [strongSelf showTransientMessage:@"无法提交" detail:@"当前视频已切换，请重新选择"];
             return;
         }
-        [strongSelf submitSegmentValues:@[[strongSelf roundedTimeNumber:MIN(currentTime, videoDuration)]]
-                               category:category
-                             actionType:@"poi"
-                    clearDraftOnSuccess:YES];
+        [strongSelf saveDraftSegmentValues:@[[strongSelf roundedTimeNumber:MIN(currentTime, videoDuration)]]
+                                  category:category
+                                actionType:@"poi"];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     alert.popoverPresentationController.sourceView = sourceView ?: self;
@@ -1249,10 +1323,9 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    [self submitSegmentValues:segment
-                     category:self.submissionCategory
-                   actionType:[self submissionActionTypeForCategory:self.submissionCategory]
-          clearDraftOnSuccess:YES];
+    [self saveDraftSegmentValues:segment
+                        category:self.submissionCategory
+                      actionType:[self submissionActionTypeForCategory:self.submissionCategory]];
 }
 
 - (void)cancelSubmissionDraft {
@@ -1266,53 +1339,26 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self resizeForContent];
 }
 
-- (void)submitSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType clearDraftOnSuccess:(BOOL)clearDraftOnSuccess {
-    if (self.submissionRequestInFlight) {
+- (void)saveDraftSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType {
+    NJSponsorBlockSegment *localSegment = [[NJSponsorBlockManager sharedInstance] addUnsubmittedSegmentWithCategory:category actionType:actionType segment:segment];
+    if (!localSegment) {
+        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
+                     segment:nil
+                       title:@"保存失败"
+                      detail:@"无法保存本地未提交片段"
+                primaryTitle:(self.submissionInProgress ? @"重试" : nil)
+              secondaryTitle:(self.submissionInProgress ? @"取消" : nil)];
         return;
     }
-    self.submissionRequestInFlight = YES;
-    [self updateEnabledButton:[NJSponsorBlockSettings enabled]];
-    [self showNoticeMode:NJSponsorBlockPanelNoticeModeMessage
-                 segment:nil
-                   title:@"正在提交"
-                  detail:@"请稍候"
-            primaryTitle:nil
-          secondaryTitle:nil];
 
-    __weak typeof(self) weakSelf = self;
-    [[NJSponsorBlockManager sharedInstance] submitSegmentWithCategory:category actionType:actionType segment:segment completion:^(BOOL success, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) {
-                return;
-            }
-            strongSelf.submissionRequestInFlight = NO;
-            [strongSelf updateEnabledButton:[NJSponsorBlockSettings enabled]];
-            if (success) {
-                if (clearDraftOnSuccess) {
-                    strongSelf.submissionInProgress = NO;
-                    strongSelf.submissionCategory = nil;
-                    strongSelf.submissionVideoID = nil;
-                    strongSelf.submissionCID = 0;
-                    strongSelf.submissionVideoDuration = 0;
-                    strongSelf.submissionStartTime = 0;
-                }
-                [strongSelf showTransientMessage:@"提交成功" detail:@"感谢贡献，片段刷新中"];
-                return;
-            }
-
-            if (strongSelf.submissionInProgress) {
-                [strongSelf showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                                     segment:nil
-                                       title:@"提交失败"
-                                      detail:error.localizedDescription ?: @"请稍后重试"
-                                primaryTitle:@"重试"
-                              secondaryTitle:@"取消"];
-            } else {
-                [strongSelf showTransientMessage:@"提交失败" detail:error.localizedDescription ?: @"请稍后重试"];
-            }
-        });
-    }];
+    self.submissionInProgress = NO;
+    self.submissionCategory = nil;
+    self.submissionVideoID = nil;
+    self.submissionCID = 0;
+    self.submissionVideoDuration = 0;
+    self.submissionStartTime = 0;
+    [self showTransientMessage:@"已保存草稿" detail:@"可在提交菜单中提交或管理"];
+    [self refreshContent];
 }
 
 - (BOOL)currentPlaybackTimeIsValid:(NSTimeInterval)time {
@@ -1387,6 +1433,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)voteForSegment:(NJSponsorBlockSegment *)segment type:(NSInteger)type {
+    if (segment.isUnsubmitted) {
+        [self showTransientMessage:@"无法投票" detail:@"本地未提交片段不能投票"];
+        return;
+    }
     if (segment.uuid.length == 0) {
         [self showTransientMessage:@"无法投票" detail:@"片段 UUID 为空"];
         return;

@@ -17,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *actionType;
 @property (nonatomic, assign) NSInteger cid;
 @property (nonatomic, assign) NSTimeInterval videoDuration;
+@property (nonatomic, assign, getter=isUnsubmitted) BOOL unsubmitted;
 
 + (nullable instancetype)segmentWithDictionary:(NSDictionary *)dictionary;
 - (BOOL)containsPlaybackTime:(NSTimeInterval)time;

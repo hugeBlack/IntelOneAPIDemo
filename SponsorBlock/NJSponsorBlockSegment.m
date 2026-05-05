@@ -56,6 +56,7 @@
     [coder encodeObject:self.actionType forKey:@"actionType"];
     [coder encodeInteger:self.cid forKey:@"cid"];
     [coder encodeDouble:self.videoDuration forKey:@"videoDuration"];
+    [coder encodeBool:self.unsubmitted forKey:@"unsubmitted"];
 }
 
 - (instancetype)initWithCoder:(NSCoder *)coder {
@@ -69,6 +70,7 @@
         self.actionType = [coder decodeObjectOfClass:[NSString class] forKey:@"actionType"] ?: @"";
         self.cid = [coder decodeIntegerForKey:@"cid"];
         self.videoDuration = [coder decodeDoubleForKey:@"videoDuration"];
+        self.unsubmitted = [coder decodeBoolForKey:@"unsubmitted"];
     }
     return self;
 }

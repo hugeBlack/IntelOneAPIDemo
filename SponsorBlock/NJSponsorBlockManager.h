@@ -43,10 +43,13 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification
 - (void)clearSkippedSegment:(NJSponsorBlockSegment *)segment;
 - (void)recordLastSkippedSegment:(NJSponsorBlockSegment *)segment;
 - (void)reportSegmentSkipped:(NJSponsorBlockSegment *)segment;
-- (void)submitSegmentWithCategory:(NSString *)category
-                       actionType:(NSString *)actionType
-                          segment:(NSArray<NSNumber *> *)segment
-                       completion:(nullable NJSponsorBlockSubmitCompletion)completion;
+- (void)submitUnsubmittedSegmentsForCurrentVideoWithCompletion:(nullable NJSponsorBlockSubmitCompletion)completion;
+- (nullable NJSponsorBlockSegment *)addUnsubmittedSegmentWithCategory:(NSString *)category
+                                                           actionType:(NSString *)actionType
+                                                              segment:(NSArray<NSNumber *> *)segment;
+- (NSArray<NJSponsorBlockSegment *> *)unsubmittedSegmentsForCurrentVideo;
+- (void)clearUnsubmittedSegmentsForCurrentVideo;
+- (void)clearAllUnsubmittedSegments;
 - (BOOL)hasSkippedSegment:(NJSponsorBlockSegment *)segment;
 - (BOOL)hasActuallySkippedSegment:(NJSponsorBlockSegment *)segment;
 - (BOOL)isInCooldown;

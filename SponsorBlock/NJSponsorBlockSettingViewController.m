@@ -8,6 +8,9 @@
 #import "NJSponsorBlockColorPickerController.h"
 #import "NJSponsorBlockCacheStats.h"
 #import "NJSponsorBlockManager.h"
+#import "NJSponsorBlockSubmissionManagerViewController.h"
+#import "NJSponsorBlockUnsubmittedSegmentStore.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 static NSString * const NJSponsorBlockSettingCellID = @"NJSponsorBlockSettingCellID";
 
@@ -19,6 +22,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     NJSponsorBlockSettingSectionCategories,
     NJSponsorBlockSettingSectionColors,
     NJSponsorBlockSettingSectionThumbnailBadgeColors,
+    NJSponsorBlockSettingSectionUnsubmittedSegments,
     NJSponsorBlockSettingSectionServer,
     NJSponsorBlockSettingSectionBackup,
     NJSponsorBlockSettingSectionAbout,
@@ -29,6 +33,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 @property (nonatomic, copy) NSString *editingColorCategory;
 @property (nonatomic, copy) NSString *editingThumbnailBadgeLabel;
 @property (nonatomic, assign) BOOL isImportingOptions;
+- (void)configureUnsubmittedSegmentCell:(UITableViewCell *)cell row:(NSInteger)row;
 @end
 
 @implementation NJSponsorBlockSettingViewController
@@ -43,6 +48,11 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     self.tableView.rowHeight = 48;
     self.tableView.backgroundColor = [UIColor systemBackgroundColor];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:NJSponsorBlockSettingCellID];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self.tableView reloadData];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -65,6 +75,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return [NJSponsorBlockSettings categoryOptions].count;
         case NJSponsorBlockSettingSectionThumbnailBadgeColors:
             return [NJSponsorBlockSettings thumbnailBadgeLabelOptions].count;
+        case NJSponsorBlockSettingSectionUnsubmittedSegments:
+            return 1;
         case NJSponsorBlockSettingSectionServer:
             return 4;
         case NJSponsorBlockSettingSectionBackup:
@@ -92,6 +104,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             return @"行为颜色";
         case NJSponsorBlockSettingSectionThumbnailBadgeColors:
             return @"缩略图标签颜色";
+        case NJSponsorBlockSettingSectionUnsubmittedSegments:
+            return @"未提交片段";
         case NJSponsorBlockSettingSectionServer:
             return @"服务器";
         case NJSponsorBlockSettingSectionBackup:
@@ -109,6 +123,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     }
     if (section == NJSponsorBlockSettingSectionBackup) {
         return @"导入/导出的选项以 JSON 格式保存，包含了您的私人用户 ID，请谨慎保管。";
+    }
+    if (section == NJSponsorBlockSettingSectionUnsubmittedSegments) {
+        return @"未提交片段会显示在播放器进度条中，投稿成功后会自动移除。";
     }
     if (section == NJSponsorBlockSettingSectionAbout) {
         return @"当前 iOS 客户端支持官方插件的播放跳过、分类行为、服务器、缓存配置、缩略图标签和基础片段投稿。投稿为移动端简化流程，不包含浏览器扩展的完整编辑器、快捷键、动态/评论屏蔽等功能。";
@@ -176,6 +193,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
             break;
         case NJSponsorBlockSettingSectionThumbnailBadgeColors:
             [self configureThumbnailBadgeColorCell:cell row:indexPath.row];
+            break;
+        case NJSponsorBlockSettingSectionUnsubmittedSegments:
+            [self configureUnsubmittedSegmentCell:cell row:indexPath.row];
             break;
         case NJSponsorBlockSettingSectionCategories:
             [self configureCategoryCell:cell row:indexPath.row];
@@ -397,6 +417,15 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 }
 
+- (void)configureUnsubmittedSegmentCell:(UITableViewCell *)cell row:(NSInteger)row {
+    NJSponsorBlockUnsubmittedSegmentStore *store = [NJSponsorBlockUnsubmittedSegmentStore sharedStore];
+    cell.textLabel.text = @"未提交片段管理";
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%lu 个视频 · %lu 段",
+                                 (unsigned long)store.videoCount,
+                                 (unsigned long)store.totalSegmentCount];
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+}
+
 - (UIImage *)circleImageWithColor:(UIColor *)color size:(CGFloat)size {
     CGSize imageSize = CGSizeMake(size, size);
     UIGraphicsBeginImageContextWithOptions(imageSize, NO, 0);
@@ -538,6 +567,10 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     if (indexPath.section == NJSponsorBlockSettingSectionCache && indexPath.row == 2) {
         [self presentClearCacheConfirmation];
     }
+    if (indexPath.section == NJSponsorBlockSettingSectionUnsubmittedSegments) {
+        NJSponsorBlockSubmissionManagerViewController *controller = [[NJSponsorBlockSubmissionManagerViewController alloc] init];
+        [self.navigationController pushViewController:controller animated:YES];
+    }
 }
 
 - (void)presentNumberInputWithTitle:(NSString *)title value:(NSTimeInterval)value handler:(void (^)(NSTimeInterval value))handler {
@@ -672,7 +705,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     [jsonData writeToURL:tempURL atomically:YES];
 
     self.isImportingOptions = NO;
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithURLs:@[tempURL] inMode:UIDocumentPickerModeExportToService];
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[tempURL]];
     picker.delegate = self;
     [self presentViewController:picker animated:YES completion:nil];
 }
@@ -764,7 +797,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     [jsonData writeToURL:tempURL atomically:YES];
 
     self.isImportingOptions = NO;
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithURLs:@[tempURL] inMode:UIDocumentPickerModeExportToService];
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[tempURL]];
     picker.delegate = self;
     [self presentViewController:picker animated:YES completion:nil];
 }
@@ -846,7 +879,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
 }
 
 - (void)presentDocumentPickerForImport {
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.json"] inMode:UIDocumentPickerModeImport];
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeJSON]];
     picker.delegate = self;
     [self presentViewController:picker animated:YES completion:nil];
 }
