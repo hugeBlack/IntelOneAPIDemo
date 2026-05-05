@@ -5,12 +5,16 @@
 
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
-#import <substrate.h>
-#import "NJCommonDefine.h"
-#import "NJSettingCache.h"
-#import "NJSponsorBlockManager.h"
-#import "NJSponsorBlockPanelView.h"
-#import "NJSponsorBlockSegment.h"
+extern "C"
+{
+#include "Tweaks/Tweaks.h"
+#include "NJCommonDefine.h"
+#include "NJSettingCache.h"
+#include "NJSponsorBlockManager.h"
+#include "NJSponsorBlockPanelView.h"
+#include "NJSponsorBlockSegment.h"
+}
+
 
 static __weak id NJSponsorBlockCurrentIJKPlayer;
 static __weak id NJSponsorBlockCurrentSeekObject;
@@ -101,20 +105,6 @@ static void NJSBHookIJKPrepareToPlay(id self, SEL _cmd) {
     }
 }
 
-static void NJSponsorBlockHookSelector(Class cls, SEL selector, IMP replacement, IMP *original) {
-    if (!cls || !selector || !replacement || !original) {
-        return;
-    }
-    Method method = class_getInstanceMethod(cls, selector);
-    if (!method) {
-        NSLog(@"[NJSponsorBlock] selector not found: %@ %@", NSStringFromClass(cls), NSStringFromSelector(selector));
-        return;
-    }
-    const char *encoding = method_getTypeEncoding(method);
-    NSLog(@"[NJSponsorBlock] hook encoding %@ %@: %s", NSStringFromClass(cls), NSStringFromSelector(selector), encoding ?: "");
-    MSHookMessageEx(cls, selector, replacement, original);
-    NSLog(@"[NJSponsorBlock] hooked: %@ %@", NSStringFromClass(cls), NSStringFromSelector(selector));
-}
 
 static BOOL NJSponsorBlockMethodArgumentIsFloatingPoint(Method method, unsigned int index) {
     char *type = method_copyArgumentType(method, index);
@@ -143,7 +133,7 @@ static void NJSponsorBlockHookClockSelector(Class cls,
         return;
     }
     
-    NJSponsorBlockHookSelector(cls, selector, replacement, original);
+    JRSwizzleInstanceMethod(cls, selector, replacement, original);
 }
 
 static void NJSponsorBlockCaptureIJKPlayer(id player) {
@@ -632,15 +622,15 @@ static void NJSponsorBlockInstallRuntimeHooks(void) {
     
     Class ijkClass = objc_getClass("IJKFFMoviePlayerControllerFFPlay");
     if (ijkClass && !NJSponsorBlockIJKHooksInstalled) {
-        NJSponsorBlockHookSelector(ijkClass,
+        JRSwizzleInstanceMethod(ijkClass,
                                    NSSelectorFromString(@"setPlaybackRate:"),
                                    (IMP)NJSBHookIJKSetPlaybackRate,
                                    (IMP *)&NJSBOrigIJKSetPlaybackRate);
-        NJSponsorBlockHookSelector(ijkClass,
+        JRSwizzleInstanceMethod(ijkClass,
                                    NSSelectorFromString(@"play"),
                                    (IMP)NJSBHookIJKPlay,
                                    (IMP *)&NJSBOrigIJKPlay);
-        NJSponsorBlockHookSelector(ijkClass,
+        JRSwizzleInstanceMethod(ijkClass,
                                    NSSelectorFromString(@"prepareToPlay"),
                                    (IMP)NJSBHookIJKPrepareToPlay,
                                    (IMP *)&NJSBOrigIJKPrepareToPlay);
@@ -651,7 +641,7 @@ static void NJSponsorBlockInstallRuntimeHooks(void) {
     
     Class playerItemServiceClass = objc_getClass("BBPlayerNetworkPlayerItemService");
     if (playerItemServiceClass && !NJSponsorBlockPlayerItemHookInstalled) {
-        NJSponsorBlockHookSelector(playerItemServiceClass,
+        JRSwizzleInstanceMethod(playerItemServiceClass,
                                    NSSelectorFromString(@"setMp:"),
                                    (IMP)NJSBHookNetworkPlayerItemServiceSetMP,
                                    (IMP *)&NJSBOrigNetworkPlayerItemServiceSetMP);

@@ -4,13 +4,15 @@
 //
 //  Created by s s on 2026/5/4.
 //
-#include "../NJSettingCache.h"
-@import ObjectiveC;
-@import Foundation;
-@import UIKit;
+#include <Foundation/Foundation.h>
+#include <UIKit/UIKit.h>
+#include <objc/objc.h>
+#include <objc/runtime.h>
+
+#define PrivClass(name) ((Class)objc_lookUpClass(#name))
 
 BOOL JRSwizzleInstanceMethod(Class targetClass, SEL selector, IMP newIMP, IMP *origIMPPtr);
-void swizzle(Class class, SEL originalAction, SEL swizzledAction);
+void swizzle(Class clazz, SEL originalAction, SEL swizzledAction);
 
 
 

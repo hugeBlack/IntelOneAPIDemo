@@ -138,27 +138,11 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				EXECUTABLE_PREFIX = lib;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(MonkeyDevPath)/Frameworks",
-					"$(MonkeyDevPath)/Librarys",
-					"$(MonkeyDevTheosPath)/vendor/lib",
-				);
-				HEADER_SEARCH_PATHS = (
-					"$(MonkeyDevPath)/include",
-					"$(MonkeyDevTheosPath)/vendor/include",
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(MonkeyDevPath)/Frameworks",
-					"$(MonkeyDevTheosPath)/vendor/lib/**",
-					/opt/theos/vendor/lib,
-				);
+				FRAMEWORK_SEARCH_PATHS = "";
+				HEADER_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 26.3;
-				MonkeyDevPath = /opt/MonkeyDev;
-				MonkeyDevTheosPath = /opt/theos;
-				OTHER_LDFLAGS = (
-					"-weak_library",
-					"$(MonkeyDevPath)/Frameworks/libsubstrate.dylib",
-				);
+				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -176,27 +160,11 @@
 				DYLIB_COMPATIBILITY_VERSION = 1;
 				DYLIB_CURRENT_VERSION = 1;
 				EXECUTABLE_PREFIX = lib;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(MonkeyDevPath)/Frameworks",
-					"$(MonkeyDevPath)/Librarys",
-					"$(MonkeyDevTheosPath)/vendor/lib",
-				);
-				HEADER_SEARCH_PATHS = (
-					"$(MonkeyDevPath)/include",
-					"$(MonkeyDevTheosPath)/vendor/include",
-				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(MonkeyDevPath)/Frameworks",
-					"$(MonkeyDevTheosPath)/vendor/lib/**",
-					/opt/theos/vendor/lib,
-				);
+				FRAMEWORK_SEARCH_PATHS = "";
+				HEADER_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 26.3;
-				MonkeyDevPath = /opt/MonkeyDev;
-				MonkeyDevTheosPath = /opt/theos;
-				OTHER_LDFLAGS = (
-					"-weak_library",
-					"$(MonkeyDevPath)/Frameworks/libsubstrate.dylib",
-				);
+				OTHER_LDFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;

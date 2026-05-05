@@ -481,16 +481,19 @@ static void NJSBUpdateThumbnailBadgeForVideoCard(UIView *cardView, UIView *cover
 static void (*orig_BBMediaUniteRelateCell_installCellWithObject)(id self, SEL sel, id object) = nil;
 static void hook_BBMediaUniteRelateCell_installCellWithObject(id self, SEL sel, id object) {
     orig_BBMediaUniteRelateCell_installCellWithObject(self, sel, object);
-
-    UIView *cover = NJSBThumbnailBadgeCoverViewForCard(self);
-    NJSBUpdateThumbnailBadgeForVideoCard((UIView *)self, cover, object);
+    if([NJSponsorBlockSettings showVideoLabels]) {
+        UIView *cover = NJSBThumbnailBadgeCoverViewForCard(self);
+        NJSBUpdateThumbnailBadgeForVideoCard((UIView *)self, cover, object);
+    }
 }
 
 static void (*orig_BBMediaUniteRelateCell_prepareForReuse)(id self, SEL sel) = nil;
 static void hook_BBMediaUniteRelateCell_prepareForReuse(id self, SEL sel) {
     orig_BBMediaUniteRelateCell_prepareForReuse(self, sel);
-    NJSBHideThumbnailBadgeFromCoverView(NJSBThumbnailBadgeCoverViewForCard(self));
-    NJSBSetThumbnailBadgeRequestBVID((UIView *)self, nil);
+    if([NJSponsorBlockSettings showVideoLabels]) {
+        NJSBHideThumbnailBadgeFromCoverView(NJSBThumbnailBadgeCoverViewForCard(self));
+        NJSBSetThumbnailBadgeRequestBVID((UIView *)self, nil);
+    }
 }
 
 static void NJSBApplySearchThumbnailBadgeAfterConfig(id cell, id model) {
@@ -507,13 +510,17 @@ static void NJSBApplySearchThumbnailBadgeAfterConfig(id cell, id model) {
 static void (*orig_SearchVideoCell_config)(id self, SEL sel, id model) = nil;
 static void hook_SearchVideoCell_config(id self, SEL sel, id model) {
     orig_SearchVideoCell_config(self, sel, model);
-    NJSBApplySearchThumbnailBadgeAfterConfig(self, model);
+    if([NJSponsorBlockSettings showVideoLabels]) {
+        NJSBApplySearchThumbnailBadgeAfterConfig(self, model);
+    }
 }
 
 static void (*orig_SearchImageTextCell_config)(id self, SEL sel, id model) = nil;
 static void hook_SearchImageTextCell_config(id self, SEL sel, id model) {
     orig_SearchImageTextCell_config(self, sel, model);
-    NJSBApplySearchThumbnailBadgeAfterConfig(self, model);
+    if([NJSponsorBlockSettings showVideoLabels]) {
+        NJSBApplySearchThumbnailBadgeAfterConfig(self, model);
+    }
 }
 
 static UIView *NJSBUserSpaceCoverViewForCell(id cell) {
@@ -555,6 +562,10 @@ static void NJSBApplyUserSpaceThumbnailBadge(id cell, id object) {
 
 static void (*orig_BBPhoneUserSpaceUploadVideoCell_installObj)(id self, SEL sel, id object) = nil;
 static void hook_BBPhoneUserSpaceUploadVideoCell_installObj(id self, SEL sel, id object) {
+    if(![NJSponsorBlockSettings showVideoLabels]) {
+        orig_BBPhoneUserSpaceUploadVideoCell_installObj(self, sel, object);
+        return;
+    }
     NJSBClearUserSpaceThumbnailBadge(self);
     orig_BBPhoneUserSpaceUploadVideoCell_installObj(self, sel, object);
     NJSBApplyUserSpaceThumbnailBadge(self, object);
@@ -563,11 +574,17 @@ static void hook_BBPhoneUserSpaceUploadVideoCell_installObj(id self, SEL sel, id
 static void (*orig_BBPhoneUserSpaceUploadVideoCell_prepareForReuse)(id self, SEL sel) = nil;
 static void hook_BBPhoneUserSpaceUploadVideoCell_prepareForReuse(id self, SEL sel) {
     orig_BBPhoneUserSpaceUploadVideoCell_prepareForReuse(self, sel);
-    NJSBClearUserSpaceThumbnailBadge(self);
+    if([NJSponsorBlockSettings showVideoLabels]) {
+        NJSBClearUserSpaceThumbnailBadge(self);
+    }
 }
 
 static void (*orig_BBPhoneUserSpaceHomeVideoCell_installObj)(id self, SEL sel, id object) = nil;
 static void hook_BBPhoneUserSpaceHomeVideoCell_installObj(id self, SEL sel, id object) {
+    if(![NJSponsorBlockSettings showVideoLabels]) {
+        orig_BBPhoneUserSpaceHomeVideoCell_installObj(self, sel, object);
+        return;
+    }
     NJSBClearUserSpaceThumbnailBadge(self);
     orig_BBPhoneUserSpaceHomeVideoCell_installObj(self, sel, object);
     NJSBApplyUserSpaceThumbnailBadge(self, object);

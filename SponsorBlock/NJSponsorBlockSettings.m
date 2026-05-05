@@ -558,3 +558,12 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
 }
 
 @end
+
+YYCache* getSettingsCache(void) {
+    static YYCache* cache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cache = ((NJSettingCache*)[objc_getClass("NJSettingCache") sharedInstance]).cache;
+    });
+    return cache;
+}
