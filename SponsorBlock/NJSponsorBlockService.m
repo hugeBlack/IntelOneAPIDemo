@@ -231,7 +231,7 @@ static NSString * const NJSponsorBlockServiceErrorDomain = @"NJSponsorBlockServi
     };
     NSDictionary *body = @{
         @"videoID": videoID,
-        @"cid": @(cid),
+        @"cid": [@(cid) stringValue],
         @"userID": [self sponsorBlockUserID],
         @"segments": @[segmentObject],
         @"videoDuration": @(videoDuration),

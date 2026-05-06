@@ -1,0 +1,43 @@
+name: Build SponsorBlock
+
+on:
+  push:
+    branches: ["bbspblk"]
+  pull_request:
+    branches: ["bbspblk"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.4'
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build dylib
+        run: |
+          xcodebuild \
+            -project SponsorBlock.xcodeproj \
+            -scheme SponsorBlock \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$GITHUB_WORKSPACE/build" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Zip and encrypt dylib
+        env:
+          ZIP_PASSWORD: ${{ secrets.ZIP_PASSWORD }}
+        run: |
+          DYLIB_DIR="$GITHUB_WORKSPACE/build/Build/Products/Release-iphoneos"
+          cd "$DYLIB_DIR"
+          zip -P "$ZIP_PASSWORD" "$GITHUB_WORKSPACE/libbbsb.zip" libSponsorBlock.dylib
+
+      - name: Upload encrypted zip
+        uses: actions/upload-artifact@v7
+        with:
+          name: libbbsb-encrypted
+          path: ${{ github.workspace }}/libbbsb.zip
