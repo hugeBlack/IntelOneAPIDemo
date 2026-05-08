@@ -70,7 +70,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, strong) UIButton *closeButton;
 @property (nonatomic, strong) UIButton *toggleButton;
 @property (nonatomic, strong) UIButton *submitButton;
-@property (nonatomic, strong) UILabel *timeLabel;
 @property (nonatomic, strong) UILabel *statsLabel;
 @property (nonatomic, strong) NJSponsorBlockSegment *noticeSegment;
 @property (nonatomic, copy) NSString *suppressedNoticeUUID;
@@ -85,6 +84,9 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, assign) NSInteger submissionCID;
 @property (nonatomic, assign) BOOL submissionInProgress;
 @property (nonatomic, assign) BOOL submissionRequestInFlight;
+@property (nonatomic, strong) UIView *progressPlayheadView;
+@property (nonatomic, copy) NSArray<NJSponsorBlockSegment *> *displayedSegments;
+@property (nonatomic, copy) NSArray<UIView *> *segmentRowViews;
 
 - (UIButton *)noticeButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action;
 - (UIButton *)actionButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action segment:(NJSponsorBlockSegment *)segment;
@@ -120,6 +122,129 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 - (CGFloat)segmentRowsContentHeight;
 - (NSString *)detailTextForSegment:(NJSponsorBlockSegment *)segment currentTime:(NSTimeInterval)currentTime;
 - (NSString *)compactStringFromTime:(NSTimeInterval)time;
+- (void)onPlaybackTimeChanged;
+- (void)updateForPlaybackTimeOnMainThread;
+- (void)updateProgressPlayheadForTime:(NSTimeInterval)time duration:(NSTimeInterval)duration;
+- (void)updateSegmentRowHighlightsForTime:(NSTimeInterval)time manager:(NJSponsorBlockManager *)manager;
+
+@end
+
+@interface NJSponsorBlockTimelineView : UIView {
+    NSMutableArray<UIView *> *_segmentMarkViews;
+    UIView *_playheadView;
+}
+@property (nonatomic, copy) NSArray<NJSponsorBlockSegment *> *segments;
+@property (nonatomic, assign) NSTimeInterval duration;
+@property (nonatomic, assign) NSTimeInterval currentPlaybackTime;
+- (void)reload;
+@end
+
+@implementation NJSponsorBlockTimelineView
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        _segmentMarkViews = [NSMutableArray array];
+        self.userInteractionEnabled = NO;
+        self.clipsToBounds = YES;
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(reload)
+                                                     name:NJSponsorBlockStateDidChangeNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(onPlaybackTimeChanged)
+                                                     name:NJSponsorBlockPlaybackTimeDidChangeNotification
+                                                   object:nil];
+    }
+    return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)onPlaybackTimeChanged {
+    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    [self updatePlayhead:manager.currentPlaybackTime];
+}
+
+- (void)reload {
+    [self.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    [_segmentMarkViews removeAllObjects];
+    _playheadView = nil;
+    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    self.segments = [manager displaySegments];
+    self.duration = manager.estimatedVideoDuration;
+    self.currentPlaybackTime = manager.currentPlaybackTime;
+
+    if (self.duration <= 0 || self.segments.count == 0) {
+        return;
+    }
+
+    for (NJSponsorBlockSegment *segment in self.segments) {
+        UIView *mark = [[UIView alloc] initWithFrame:CGRectZero];
+        mark.backgroundColor = segment.isUnsubmitted
+            ? [[NJSponsorBlockSettings colorForCategory:segment.category] colorWithAlphaComponent:0.48]
+            : [NJSponsorBlockSettings colorForCategory:segment.category];
+        if (segment.isUnsubmitted) {
+            mark.layer.borderWidth = 1.0;
+            mark.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.75].CGColor;
+        }
+        [_segmentMarkViews addObject:mark];
+        [self addSubview:mark];
+    }
+
+    _playheadView = [[UIView alloc] initWithFrame:CGRectZero];
+    _playheadView.backgroundColor = UIColor.whiteColor;
+    [self addSubview:_playheadView];
+
+    [self setNeedsLayout];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+
+    CGFloat width = CGRectGetWidth(self.superview.bounds);
+    CGFloat height = CGRectGetHeight(self.superview.bounds);
+    
+    CGFloat timelineHeight = MIN(4.0, MAX(2.0, height));
+    CGFloat y = MAX(0, (height - timelineHeight) * 0.5);
+    self.frame = CGRectMake(0, y, width, timelineHeight);
+    
+    NSTimeInterval duration = self.duration;
+    NSArray<NJSponsorBlockSegment *> *segments = self.segments;
+
+    if (duration <= 0 || segments.count == 0) {
+        return;
+    }
+
+    for (NSUInteger i = 0; i < _segmentMarkViews.count && i < segments.count; i++) {
+        NJSponsorBlockSegment *segment = segments[i];
+        UIView *mark = _segmentMarkViews[i];
+        CGFloat startX = MAX(0, MIN(width, width * segment.startTime / duration));
+        CGFloat endX = MAX(startX + 2.0, MIN(width, width * segment.endTime / duration));
+        mark.frame = CGRectMake(startX, 0, endX - startX, height);
+    }
+
+    if (_playheadView) {
+        CGFloat playheadX = MAX(0, MIN(width, width * self.currentPlaybackTime / duration));
+        _playheadView.frame = CGRectMake(playheadX - 1.0, 0, 2.0, height);
+    }
+}
+
+- (void)updatePlayhead:(NSTimeInterval)time {
+    if (!_playheadView || self.duration <= 0) {
+        return;
+    }
+    self.currentPlaybackTime = time;
+    CGFloat width = CGRectGetWidth(self.bounds);
+    CGFloat height = CGRectGetHeight(self.bounds);
+    if (width <= 0 || height <= 0) {
+        return;
+    }
+    CGFloat playheadX = MAX(0, MIN(width, width * time / self.duration));
+    _playheadView.frame = CGRectMake(playheadX - 1.0, 0, 2.0, height);
+}
 
 @end
 
@@ -127,8 +252,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 
 static NJSponsorBlockOverlayWindow *NJSponsorBlockSharedOverlayWindow;
 static UIViewController *NJSponsorBlockSharedOverlayController;
-static NSHashTable<UIView *> *NJSponsorBlockNativeTimelineViews;
-static NSTimeInterval NJSponsorBlockLastPlaybackActiveTime;
+static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineViews;
 static void *NJSponsorBlockNativeTimelineKey = &NJSponsorBlockNativeTimelineKey;
 static void *NJSponsorBlockManualSkipSegmentKey = &NJSponsorBlockManualSkipSegmentKey;
 static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
@@ -218,43 +342,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     return NJSponsorBlockSharedOverlayController.view;
 }
 
-+ (void)markPlaybackActive {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NJSponsorBlockLastPlaybackActiveTime = CACurrentMediaTime();
-        if (NJSponsorBlockSharedOverlayWindow && NJSponsorBlockSharedOverlayWindow.hidden) {
-            NJSponsorBlockSharedOverlayWindow.hidden = NO;
-        }
-        [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideOverlayIfIdle) object:nil];
-        [self performSelector:@selector(hideOverlayIfIdle) withObject:nil afterDelay:NJSponsorBlockOverlayIdleTimeout + 0.5];
-    });
-}
-
-+ (void)hideOverlayIfIdle {
-    NSTimeInterval idleTime = CACurrentMediaTime() - NJSponsorBlockLastPlaybackActiveTime;
-    if (idleTime < NJSponsorBlockOverlayIdleTimeout) {
-        [self performSelector:@selector(hideOverlayIfIdle) withObject:nil afterDelay:NJSponsorBlockOverlayIdleTimeout - idleTime + 0.5];
-        return;
-    }
-    [self hideOverlay];
-}
-
-+ (void)hideOverlay {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[self sharedPanel] removeFromSuperview];
-        [[self sharedTimelineView] removeFromSuperview];
-        if (NJSponsorBlockNativeTimelineViews) {
-            for (UIView *timeline in NJSponsorBlockNativeTimelineViews.allObjects) {
-                [timeline removeFromSuperview];
-            }
-            [NJSponsorBlockNativeTimelineViews removeAllObjects];
-        }
-        if (NJSponsorBlockSharedOverlayWindow) {
-            NJSponsorBlockSharedOverlayWindow.hidden = YES;
-        }
-        NSLog(@"[NJSponsorBlock] overlay hidden");
-    });
-}
-
 + (UIWindowScene *)activeWindowScene API_AVAILABLE(ios(13.0)) {
     NSSet<UIScene *> *scenes = UIApplication.sharedApplication.connectedScenes;
     for (UIScene *scene in scenes) {
@@ -293,11 +380,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 + (UIView *)sharedTimelineView {
-    static UIView *view = nil;
+    static NJSponsorBlockTimelineView *view = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        view = [[UIView alloc] initWithFrame:CGRectZero];
-        view.userInteractionEnabled = NO;
+        view = [[NJSponsorBlockTimelineView alloc] initWithFrame:CGRectZero];
         view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.18];
         view.layer.cornerRadius = 2;
         view.layer.masksToBounds = YES;
@@ -312,7 +398,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [view addSubview:timeline];
     }
     [view bringSubviewToFront:timeline];
-    [self layoutTimeline:timeline inView:view];
+
     [self renderTimeline:timeline];
 }
 
@@ -324,12 +410,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         NJSponsorBlockNativeTimelineViews = [NSHashTable weakObjectsHashTable];
     }
 
-    UIView *timeline = objc_getAssociatedObject(view, NJSponsorBlockNativeTimelineKey);
+    NJSponsorBlockTimelineView *timeline = objc_getAssociatedObject(view, NJSponsorBlockNativeTimelineKey);
     if (!timeline) {
-        timeline = [[UIView alloc] initWithFrame:CGRectZero];
-        timeline.userInteractionEnabled = NO;
+        timeline = [[NJSponsorBlockTimelineView alloc] initWithFrame:CGRectZero];
         timeline.backgroundColor = UIColor.clearColor;
-        timeline.clipsToBounds = YES;
         objc_setAssociatedObject(view, NJSponsorBlockNativeTimelineKey, timeline, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [NJSponsorBlockNativeTimelineViews addObject:timeline];
     }
@@ -338,10 +422,9 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [timeline removeFromSuperview];
         [view addSubview:timeline];
         NSLog(@"[NJSponsorBlock] native timeline installed in %@ frame=%@", view, NSStringFromCGRect(view.frame));
+        [view bringSubviewToFront:timeline];
+        [self renderTimeline:timeline];
     }
-    [view bringSubviewToFront:timeline];
-    [self layoutNativeTimeline:timeline inView:view];
-    [self renderTimeline:timeline];
 }
 
 + (void)installInView:(UIView *)view {
@@ -372,7 +455,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 + (void)refreshNativeTimelines {
     for (UIView *timeline in NJSponsorBlockNativeTimelineViews.allObjects) {
         if (timeline.superview) {
-            [self layoutNativeTimeline:timeline inView:timeline.superview];
             [self renderTimeline:timeline];
         }
     }
@@ -459,56 +541,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     button.frame = CGRectMake(MAX(insets.left + 8.0, x), y, 38.0, 38.0);
 }
 
-+ (void)layoutTimeline:(UIView *)timeline inView:(UIView *)view {
-    CGRect bounds = view.bounds;
-    UIEdgeInsets insets = view.safeAreaInsets;
-    BOOL portrait = CGRectGetHeight(bounds) >= CGRectGetWidth(bounds);
-    CGFloat x = insets.left + 106.0;
-    CGFloat width = CGRectGetWidth(bounds) - insets.left - insets.right - 206.0;
-    CGFloat y = portrait ? insets.top + 244.0 : CGRectGetHeight(bounds) - insets.bottom - 42.0;
-    timeline.frame = CGRectMake(MAX(insets.left + 72.0, x), y, MAX(120.0, width), 4.0);
-}
-
-+ (void)layoutNativeTimeline:(UIView *)timeline inView:(UIView *)view {
-    CGRect bounds = view.bounds;
-    CGFloat width = CGRectGetWidth(bounds);
-    CGFloat height = CGRectGetHeight(bounds);
-    CGFloat timelineHeight = MIN(4.0, MAX(2.0, height));
-    CGFloat y = MAX(0, (height - timelineHeight) * 0.5);
-    timeline.frame = CGRectMake(0, y, width, timelineHeight);
-}
-
 + (void)renderTimeline:(UIView *)timeline {
-    if (!timeline.superview) {
+    if (!timeline.superview || ![timeline isKindOfClass:[NJSponsorBlockTimelineView class]]) {
         return;
     }
-
-    [timeline.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
-    NSArray<NJSponsorBlockSegment *> *segments = [manager displaySegments];
-    NSTimeInterval duration = manager.estimatedVideoDuration;
-    if (duration <= 0 || segments.count == 0) {
-        return;
-    }
-
-    CGFloat width = CGRectGetWidth(timeline.bounds);
-    CGFloat height = CGRectGetHeight(timeline.bounds);
-    for (NJSponsorBlockSegment *segment in segments) {
-        CGFloat startX = MAX(0, MIN(width, width * segment.startTime / duration));
-        CGFloat endX = MAX(startX + 2.0, MIN(width, width * segment.endTime / duration));
-        UIView *mark = [[UIView alloc] initWithFrame:CGRectMake(startX, 0, endX - startX, height)];
-        mark.backgroundColor = segment.isUnsubmitted ? [[self colorForCategory:segment.category] colorWithAlphaComponent:0.48] : [self colorForCategory:segment.category];
-        if (segment.isUnsubmitted) {
-            mark.layer.borderWidth = 1.0;
-            mark.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.75].CGColor;
-        }
-        [timeline addSubview:mark];
-    }
-
-    CGFloat playheadX = MAX(0, MIN(width, width * manager.currentPlaybackTime / duration));
-    UIView *playhead = [[UIView alloc] initWithFrame:CGRectMake(playheadX - 1.0, 0, 2.0, height)];
-    playhead.backgroundColor = UIColor.whiteColor;
-    [timeline addSubview:playhead];
+    [(NJSponsorBlockTimelineView *)timeline reload];
 }
 
 + (UIColor *)colorForCategory:(NSString *)category {
@@ -528,6 +565,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(refreshContent)
                                                      name:NJSponsorBlockStateDidChangeNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(onPlaybackTimeChanged)
+                                                     name:NJSponsorBlockPlaybackTimeDidChangeNotification
                                                    object:nil];
     }
     return self;
@@ -672,12 +713,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.statsLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
     self.statsLabel.numberOfLines = 2;
 
-    self.timeLabel = [[UILabel alloc] init];
-    self.timeLabel.textColor = [UIColor colorWithWhite:0.82 alpha:1];
-    self.timeLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightSemibold];
-    self.timeLabel.textAlignment = NSTextAlignmentRight;
 
-    self.footerStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.toggleButton, self.submitButton, self.statsLabel, self.timeLabel]];
+    self.footerStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.toggleButton, self.submitButton, self.statsLabel]];
     self.footerStack.axis = UILayoutConstraintAxisHorizontal;
     self.footerStack.alignment = UIStackViewAlignmentCenter;
     self.footerStack.distribution = UIStackViewDistributionFill;
@@ -764,14 +801,16 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     NSArray<NJSponsorBlockSegment *> *segments = [manager displaySegments] ?: @[];
 
     self.hidden = !NJ_MASTER_SWITCH_VALUE;
-    [self updateHeaderWithManager:manager segments:segments];
-    [self updateEnabledButton:[NJSponsorBlockSettings enabled]];
-    [self updateFooterWithManager:manager segments:segments];
-    [self updateNoticeWithManager:manager segments:segments];
-    [self rebuildSegmentRowsWithSegments:segments manager:manager];
-    [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
-    [self resizeForContent];
-    [[self class] renderTimeline:[[self class] sharedTimelineView]];
+    if(self.superview != nil) {
+        [self updateHeaderWithManager:manager segments:segments];
+        [self updateEnabledButton:[NJSponsorBlockSettings enabled]];
+        [self updateFooterWithManager:manager segments:segments];
+        [self updateNoticeWithManager:manager segments:segments];
+        [self rebuildSegmentRowsWithSegments:segments manager:manager];
+        [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
+        [self resizeForContent];
+    }
+
     [[self class] refreshNativeTimelines];
 }
 
@@ -795,15 +834,12 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)updateFooterWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments {
-    self.timeLabel.text = [NSString stringWithFormat:@"当前 %@", [self stringFromTime:manager.currentPlaybackTime]];
     NSTimeInterval skippedDuration = [manager skippedDurationBeforePlaybackTime:manager.currentPlaybackTime];
-    NSTimeInterval cleanTime = [manager playbackTimeWithoutSkippedSegments:manager.currentPlaybackTime];
     NSUInteger totalCount = [manager allSegments].count;
     NSString *segmentCountText = totalCount > segments.count ? [NSString stringWithFormat:@"%lu/%lu 段", (unsigned long)segments.count, (unsigned long)totalCount] : [NSString stringWithFormat:@"%lu 段", (unsigned long)segments.count];
-    self.statsLabel.text = [NSString stringWithFormat:@"%@ · 省 %@\n净 %@",
+    self.statsLabel.text = [NSString stringWithFormat:@"%@ · 省 %@",
                             segmentCountText,
-                            [self compactStringFromTime:skippedDuration],
-                            [self compactStringFromTime:cleanTime]];
+                            [self compactStringFromTime:skippedDuration]];
 }
 
 - (void)updateNoticeWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments {
@@ -879,14 +915,19 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (void)rebuildSegmentRowsWithSegments:(NSArray<NJSponsorBlockSegment *> *)segments manager:(NJSponsorBlockManager *)manager {
     [self clearSegmentRows];
 
+    NSMutableArray<UIView *> *rowViews = [NSMutableArray array];
     UIView *activeRow = nil;
     for (NJSponsorBlockSegment *segment in segments) {
         UIView *row = [self rowForSegment:segment currentTime:manager.currentPlaybackTime];
         [self.segmentStackView addArrangedSubview:row];
+        [rowViews addObject:row];
         if (!activeRow && [segment containsPlaybackTime:manager.currentPlaybackTime]) {
             activeRow = row;
         }
     }
+    self.displayedSegments = [segments copy];
+    self.segmentRowViews = [rowViews copy];
+
     if (segments.count == 0) {
         [self.segmentStackView addArrangedSubview:[self emptyRow]];
     } else if (activeRow) {
@@ -946,10 +987,69 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self.segmentStackView removeArrangedSubview:view];
         [view removeFromSuperview];
     }
+    self.displayedSegments = nil;
+    self.segmentRowViews = nil;
 }
+
+- (void)onPlaybackTimeChanged {
+    if ([NSThread isMainThread]) {
+        [self updateForPlaybackTimeOnMainThread];
+    } else {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self updateForPlaybackTimeOnMainThread];
+        });
+    }
+}
+
+- (void)updateForPlaybackTimeOnMainThread {
+    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NSTimeInterval time = manager.currentPlaybackTime;
+    NSTimeInterval duration = manager.estimatedVideoDuration;
+
+    if (self.superview) {
+        NSArray<NJSponsorBlockSegment *> *segments = self.displayedSegments ?: @[];
+        [self updateNoticeWithManager:manager segments:segments];
+        [self updateFooterWithManager:manager segments:segments];
+        [self updateProgressPlayheadForTime:time duration:duration];
+        [self updateSegmentRowHighlightsForTime:time manager:manager];
+    }
+}
+
+- (void)updateProgressPlayheadForTime:(NSTimeInterval)time duration:(NSTimeInterval)duration {
+    if (!self.progressPlayheadView || duration <= 0) {
+        return;
+    }
+    CGFloat width = CGRectGetWidth(self.progressView.bounds);
+    if (width <= 0) {
+        width = NJSponsorBlockPanelWidth - 24.0;
+    }
+    CGFloat playheadX = MAX(0, MIN(width, width * time / duration));
+    self.progressPlayheadView.frame = CGRectMake(playheadX - 1.0, 0, 2.0, 6.0);
+}
+
+- (void)updateSegmentRowHighlightsForTime:(NSTimeInterval)time manager:(NJSponsorBlockManager *)manager {
+    NSArray<NJSponsorBlockSegment *> *segments = self.displayedSegments ?: @[];
+    NSArray<UIView *> *rows = self.segmentRowViews ?: @[];
+    NSUInteger count = MIN(segments.count, rows.count);
+    for (NSUInteger i = 0; i < count; i++) {
+        NJSponsorBlockSegment *segment = segments[i];
+        UIView *row = rows[i];
+        BOOL active = [segment containsPlaybackTime:time];
+        BOOL skipped = [manager hasActuallySkippedSegment:segment];
+        if (active) {
+            row.backgroundColor = [UIColor colorWithRed:0.00 green:0.55 blue:0.58 alpha:0.92];
+        } else if (skipped) {
+            row.backgroundColor = [UIColor colorWithRed:0.18 green:0.45 blue:0.20 alpha:0.82];
+        } else {
+            row.backgroundColor = [UIColor colorWithWhite:1 alpha:0.08];
+        }
+    }
+}
+
 
 - (void)renderPanelProgressWithSegments:(NSArray<NJSponsorBlockSegment *> *)segments duration:(NSTimeInterval)duration {
     [self.progressView.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    self.progressPlayheadView = nil;
     if (duration <= 0 || segments.count == 0) {
         return;
     }
@@ -975,6 +1075,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     UIView *playhead = [[UIView alloc] initWithFrame:CGRectMake(playheadX - 1.0, 0, 2.0, 6.0)];
     playhead.backgroundColor = UIColor.whiteColor;
     [self.progressView addSubview:playhead];
+    self.progressPlayheadView = playhead;
 }
 
 - (UIView *)rowForSegment:(NJSponsorBlockSegment *)segment currentTime:(NSTimeInterval)currentTime {

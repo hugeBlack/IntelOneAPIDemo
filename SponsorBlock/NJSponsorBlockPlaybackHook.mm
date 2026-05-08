@@ -24,7 +24,6 @@ static __weak IJKFFMoviePlayerControllerFFPlay* NJSponsorBlockCurrentIJKPlayer;
 static NSTimer *NJSponsorBlockPlaybackPollTimer;
 static NSTimeInterval NJSponsorBlockLastPlaybackPosition = -1;
 static void NJSponsorBlockCaptureIJKPlayer(id player);
-static void NJSponsorBlockInstallOverlayIfNeeded(void);
 static void NJSponsorBlockInstallRuntimeHooks(void);
 static BOOL NJSponsorBlockSeekCurrentPlayerToTime(NSTimeInterval time);
 static void NJSponsorBlockHandlePlaybackTime(NSTimeInterval position);
@@ -52,14 +51,6 @@ static void NJSponsorBlockCaptureIJKPlayer(id player) {
     NSLog(@"[NJSponsorBlock] captured IJK player: %@", player);
 }
 
-
-static void NJSponsorBlockInstallOverlayIfNeeded(void) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [NJSponsorBlockPanelView markPlaybackActive];
-        [NJSponsorBlockPanelView refresh];
-    });
-}
-
 static BOOL NJSponsorBlockReadPlaybackTime(IJKFFMoviePlayerControllerFFPlay* player, NSTimeInterval *time) {
     if (!player || !time) {
         return NO;
@@ -75,8 +66,6 @@ static void NJSponsorBlockStartPlaybackPolling(void) {
             return;
         }
         
-        NJSponsorBlockInstallOverlayIfNeeded();
-        
         __block NSInteger failedReadCount = 0;
         NJSponsorBlockPlaybackPollTimer = [NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(__unused NSTimer *timer) {
             id player = NJSponsorBlockCurrentIJKPlayer;
@@ -86,7 +75,6 @@ static void NJSponsorBlockStartPlaybackPolling(void) {
                 if (failedReadCount >= 12) {
                     NSLog(@"[NJSponsorBlock] playback polling stopped after stale player");
                     NJSponsorBlockStopPlaybackPolling();
-                    [NJSponsorBlockPanelView hideOverlay];
                 }
                 return;
             }

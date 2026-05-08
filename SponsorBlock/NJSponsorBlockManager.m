@@ -15,6 +15,7 @@
 #import <objc/runtime.h>
 
 NSNotificationName const NJSponsorBlockStateDidChangeNotification = @"NJSponsorBlockStateDidChangeNotification";
+NSNotificationName const NJSponsorBlockPlaybackTimeDidChangeNotification = @"NJSponsorBlockPlaybackTimeDidChangeNotification";
 NSNotificationName const NJSponsorBlockManualSkipRequestNotification = @"NJSponsorBlockManualSkipRequestNotification";
 NSNotificationName const NJSponsorBlockSeekRequestNotification = @"NJSponsorBlockSeekRequestNotification";
 
@@ -77,6 +78,9 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 - (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message;
 - (void)clearSkipStateForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
+- (BOOL)hasSkippedSegment:(NJSponsorBlockSegment *)segment;
+- (void)postStateChangedNotification;
+- (void)postPlaybackTimeChangedNotification;
 - (void)submitStoredSegment:(NJSponsorBlockSegment *)segment
                     videoID:(NSString *)videoID
                         cid:(NSInteger)cid
@@ -262,10 +266,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     return nil;
 }
 
-- (NJSponsorBlockSegment *)autoSkipSegmentAtPlaybackTime:(NSTimeInterval)time {
-    return [self autoSkipSegmentsAtPlaybackTime:time].lastObject;
-}
-
 - (NSArray<NJSponsorBlockSegment *> *)autoSkipSegmentsAtPlaybackTime:(NSTimeInterval)time {
     NSMutableArray<NJSponsorBlockSegment *> *targetSegments = [NSMutableArray array];
     NSTimeInterval targetEndTime = 0;
@@ -342,19 +342,10 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     if (![NJSponsorBlockSettings enabled]) {
         return;
     }
-    
-    BOOL shouldNotify = fabs(time - self.currentPlaybackTime) >= 0.5 || time < self.currentPlaybackTime;
+
     self.currentPlaybackTime = time;
-    if (shouldNotify) {
-        [self postStateChangedNotification];
-    }
-    
-    NJSponsorBlockSegment *segment = [self activeSegmentAtPlaybackTime:time];
-    if (segment) {
-        NSLog(@"[NJSponsorBlock] active segment %@ %.2f-%.2f current=%.2f", segment.uuid, segment.startTime, segment.endTime, time);
-        return;
-    }
-    
+    [self postPlaybackTimeChangedNotification];
+
     if (time - self.lastProbeLogTime >= 5.0 || time < self.lastProbeLogTime) {
         self.lastProbeLogTime = time;
         NSLog(@"[NJSponsorBlock] playback time %.2f video=%@ cid=%ld segments=%lu", time, self.videoID, (long)self.cid, (unsigned long)self.segments.count);
@@ -712,6 +703,12 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 - (void)postStateChangedNotification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockStateDidChangeNotification object:self];
+    });
+}
+
+- (void)postPlaybackTimeChangedNotification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockPlaybackTimeDidChangeNotification object:self];
     });
 }
 

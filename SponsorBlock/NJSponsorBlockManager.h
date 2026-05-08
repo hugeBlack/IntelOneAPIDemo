@@ -11,6 +11,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockStateDidChangeNotification;
+FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockPlaybackTimeDidChangeNotification;
 FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockManualSkipRequestNotification;
 FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification;
 
@@ -30,7 +31,6 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification
 - (NSArray<NJSponsorBlockSegment *> *)allSegments;
 - (NSArray<NJSponsorBlockSegment *> *)displaySegments;
 - (nullable NJSponsorBlockSegment *)activeSegmentAtPlaybackTime:(NSTimeInterval)time;
-- (nullable NJSponsorBlockSegment *)autoSkipSegmentAtPlaybackTime:(NSTimeInterval)time;
 - (NSArray<NJSponsorBlockSegment *> *)autoSkipSegmentsAtPlaybackTime:(NSTimeInterval)time;
 - (nullable NJSponsorBlockSegment *)manualSkipSegmentAtPlaybackTime:(NSTimeInterval)time;
 - (nullable NJSponsorBlockSegment *)upcomingAutoSkipSegmentAtPlaybackTime:(NSTimeInterval)time withinSeconds:(NSTimeInterval)seconds;
@@ -50,7 +50,6 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification
 - (NSArray<NJSponsorBlockSegment *> *)unsubmittedSegmentsForCurrentVideo;
 - (void)clearUnsubmittedSegmentsForCurrentVideo;
 - (void)clearAllUnsubmittedSegments;
-- (BOOL)hasSkippedSegment:(NJSponsorBlockSegment *)segment;
 - (BOOL)hasActuallySkippedSegment:(NJSponsorBlockSegment *)segment;
 - (BOOL)isInCooldown;
 - (void)enterCooldown;

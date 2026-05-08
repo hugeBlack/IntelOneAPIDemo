@@ -14,8 +14,6 @@ NS_ASSUME_NONNULL_BEGIN
 + (nullable UIView *)currentHostView;
 + (void)installNativeTimelineInView:(UIView *)view;
 + (void)installInView:(UIView *)view;
-+ (void)markPlaybackActive;
-+ (void)hideOverlay;
 + (void)removePanel;
 + (void)hidePanelOnly;
 + (void)refresh;
