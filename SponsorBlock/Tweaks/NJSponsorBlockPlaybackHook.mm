@@ -127,11 +127,7 @@ static void NJSponsorBlockHandlePlaybackTime(NSTimeInterval position) {
 
     NSTimeInterval targetTime = segment.endTime;
     if (segment.videoDuration > 0 && targetTime > segment.videoDuration - 2.0) {
-        NSLog(@"[NJSponsorBlock] ignore segment near video end %@ %.2f-%.2f", segment.uuid, segment.startTime, segment.endTime);
-        for (NJSponsorBlockSegment *skippedSegment in segments) {
-            [manager markSegmentSkipped:skippedSegment];
-        }
-        return;
+        targetTime -= 2.0;
     }
 
     if (NJSponsorBlockSeekCurrentPlayerToTime(targetTime)) {
