@@ -4,7 +4,7 @@
 //
 //  Created by s s on 2026/5/2.
 //
-#include "YYCache.h"
+#include "../Vendor/YYCache.h"
 #include <objc/objc.h>
 #include <objc/runtime.h>
 

@@ -16,4 +16,5 @@ __attribute__((constructor)) void TweakInit(void) {
     initPlayerWidgetButtonHooks();
     initViewReplyHooks();
     initThumbnailBadgeHooks();
+    NJSponsorBlockPlaybackHookInit();
 }

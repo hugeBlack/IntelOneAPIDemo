@@ -5,8 +5,8 @@
 //  Created by s s on 2026/5/4.
 //
 #include "Tweaks.h"
-#include "../NJSponsorBlockPanelView.h"
-#include "../NJSponsorBlockSettings.h"
+#include "../UI/NJSponsorBlockPanelView.h"
+#include "../Settings/NJSponsorBlockSettings.h"
 
 void hook_BBPlayerFlexContainerWidget_viewWillDisappear(id self, SEL sel, bool animated) {
     [NJSponsorBlockPanelView removePanel];

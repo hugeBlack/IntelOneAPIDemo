@@ -4,8 +4,8 @@
 //
 
 #import "NJSponsorBlockUnsubmittedSegmentStore.h"
-#import "NJSponsorBlockSegment.h"
-#import "NJSettingCache.h"
+#import "../Models/NJSponsorBlockSegment.h"
+#import "../Settings/NJSettingCache.h"
 #import <math.h>
 
 static NSString * const NJSponsorBlockUnsubmittedSegmentsKey = @"NJSponsorBlockUnsubmittedSegmentsKey";

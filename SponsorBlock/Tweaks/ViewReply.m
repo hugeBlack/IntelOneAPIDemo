@@ -5,8 +5,8 @@
 //  Created by s s on 2026/5/4.
 //
 #include "Tweaks.h"
-#include "../NJSettingDefine.h"
-#include "../NJSponsorBlockManager.h"
+#include "../Settings/NJSettingDefine.h"
+#include "../Services/NJSponsorBlockManager.h"
 
 id (*orig_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error)(id self, SEL, id data, id registry, id* error) = nil;
 id hook_BAPIAppViewuniteV1ViewReply_initWithData_extensionRegistry_error(id self, SEL sel, id data, id registry, id* error) {

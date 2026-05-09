@@ -4,7 +4,7 @@
 //
 
 #import "NJSponsorBlockSettings.h"
-#import "NJSponsorBlockSegment.h"
+#import "../Models/NJSponsorBlockSegment.h"
 #import "NJCommonDefine.h"
 #import "NJSettingCache.h"
 

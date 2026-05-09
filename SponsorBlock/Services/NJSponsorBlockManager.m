@@ -4,13 +4,13 @@
 //
 
 #import "NJSponsorBlockManager.h"
-#import "NJSponsorBlockSegment.h"
+#import "../Models/NJSponsorBlockSegment.h"
 #import "NJSponsorBlockService.h"
-#import "NJSponsorBlockSettings.h"
-#import "NJSponsorBlockCacheStats.h"
+#import "../Settings/NJSponsorBlockSettings.h"
+#import "../Models/NJSponsorBlockCacheStats.h"
 #import "NJSponsorBlockUnsubmittedSegmentStore.h"
-#import "NJCommonDefine.h"
-#import "NJSettingCache.h"
+#import "../Settings/NJCommonDefine.h"
+#import "../Settings/NJSettingCache.h"
 #import <math.h>
 #import <objc/runtime.h>
 

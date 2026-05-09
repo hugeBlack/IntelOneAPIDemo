@@ -4,8 +4,8 @@
 //
 
 #import "NJSponsorBlockService.h"
-#import "NJSponsorBlockSegment.h"
-#import "NJSponsorBlockSettings.h"
+#import "../Models/NJSponsorBlockSegment.h"
+#import "../Settings/NJSponsorBlockSettings.h"
 #import <CommonCrypto/CommonDigest.h>
 #import <math.h>
 

@@ -4,10 +4,10 @@
 //
 
 #import "NJSponsorBlockSubmissionManagerViewController.h"
-#import "NJSponsorBlockManager.h"
-#import "NJSponsorBlockSegment.h"
-#import "NJSponsorBlockSettings.h"
-#import "NJSponsorBlockUnsubmittedSegmentStore.h"
+#import "../Services/NJSponsorBlockManager.h"
+#import "../Models/NJSponsorBlockSegment.h"
+#import "../Settings/NJSponsorBlockSettings.h"
+#import "../Services/NJSponsorBlockUnsubmittedSegmentStore.h"
 #import <math.h>
 
 static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmissionCellID";

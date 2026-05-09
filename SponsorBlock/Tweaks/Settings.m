@@ -6,9 +6,9 @@
 //
 
 #include "Tweaks.h"
-#include "../NJSettingDefine.h"
-#include "../NJSponsorBlockSettingViewController.h"
-#include "../NJSponsorBlockSettings.h"
+#include "../Settings/NJSettingDefine.h"
+#include "../UI/NJSponsorBlockSettingViewController.h"
+#include "../Settings/NJSponsorBlockSettings.h"
 
 @interface NJSettingSkullViewModel : NSObject
 

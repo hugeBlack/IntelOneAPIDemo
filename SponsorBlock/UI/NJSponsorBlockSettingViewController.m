@@ -4,12 +4,12 @@
 //
 
 #import "NJSponsorBlockSettingViewController.h"
-#import "NJSponsorBlockSettings.h"
+#import "../Settings/NJSponsorBlockSettings.h"
 #import "NJSponsorBlockColorPickerController.h"
-#import "NJSponsorBlockCacheStats.h"
-#import "NJSponsorBlockManager.h"
+#import "../Models/NJSponsorBlockCacheStats.h"
+#import "../Services/NJSponsorBlockManager.h"
 #import "NJSponsorBlockSubmissionManagerViewController.h"
-#import "NJSponsorBlockUnsubmittedSegmentStore.h"
+#import "../Services/NJSponsorBlockUnsubmittedSegmentStore.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 static NSString * const NJSponsorBlockSettingCellID = @"NJSponsorBlockSettingCellID";

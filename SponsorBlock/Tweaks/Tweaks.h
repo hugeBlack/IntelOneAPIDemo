@@ -39,3 +39,4 @@ void initViewReplyHooks(void);
 void initSettingsHooks(void);
 void initSeekbarHooks(void);
 void initThumbnailBadgeHooks(void);
+void NJSponsorBlockPlaybackHookInit(void);

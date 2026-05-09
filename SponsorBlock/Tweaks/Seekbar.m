@@ -5,8 +5,8 @@
 //  Created by s s on 2026/5/4.
 //
 #include "Tweaks.h"
-#include "../NJSponsorBlockPanelView.h"
-#include "../NJSponsorBlockSettings.h"
+#include "../UI/NJSponsorBlockPanelView.h"
+#include "../Settings/NJSponsorBlockSettings.h"
 
 // hooks start
 void (*orig_BBPlayerSeekbarContainerView_layoutSubviews)(id self, SEL sel) = nil;

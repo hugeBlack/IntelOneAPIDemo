@@ -4,12 +4,12 @@
 //
 
 #import "NJSponsorBlockPanelView.h"
-#import "NJCommonDefine.h"
-#import "NJSettingCache.h"
-#import "NJSponsorBlockManager.h"
-#import "NJSponsorBlockSegment.h"
-#import "NJSponsorBlockService.h"
-#import "NJSponsorBlockSettings.h"
+#import "../Settings/NJCommonDefine.h"
+#import "../Settings/NJSettingCache.h"
+#import "../Services/NJSponsorBlockManager.h"
+#import "../Models/NJSponsorBlockSegment.h"
+#import "../Services/NJSponsorBlockService.h"
+#import "../Settings/NJSponsorBlockSettings.h"
 #import "NJSponsorBlockSubmissionManagerViewController.h"
 #import <float.h>
 #import <math.h>

@@ -1,6 +1,6 @@
 #include "Tweaks.h"
-#include "../NJSponsorBlockThumbnailLabelService.h"
-#include "../NJSponsorBlockSettings.h"
+#include "../Services/NJSponsorBlockThumbnailLabelService.h"
+#include "../Settings/NJSponsorBlockSettings.h"
 #import <objc/runtime.h>
 
 static const NSInteger kNJSBThumbnailBadgeTag = 0x53424247;

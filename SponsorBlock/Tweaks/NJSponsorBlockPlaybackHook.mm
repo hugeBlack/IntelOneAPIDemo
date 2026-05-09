@@ -7,12 +7,12 @@
 #import <objc/runtime.h>
 extern "C"
 {
-#include "Tweaks/Tweaks.h"
-#include "NJCommonDefine.h"
-#include "NJSettingCache.h"
-#include "NJSponsorBlockManager.h"
-#include "NJSponsorBlockPanelView.h"
-#include "NJSponsorBlockSegment.h"
+#include "../Tweaks/Tweaks.h"
+#include "../Settings/NJCommonDefine.h"
+#include "../Settings/NJSettingCache.h"
+#include "../Services/NJSponsorBlockManager.h"
+#include "../UI/NJSponsorBlockPanelView.h"
+#include "../Models/NJSponsorBlockSegment.h"
 }
 
 @interface IJKFFMoviePlayerControllerFFPlay: NSObject
@@ -196,7 +196,7 @@ static void NJSponsorBlockInstallRuntimeHooks(void) {
     }
 }
 
-__attribute__((constructor)) static void NJSponsorBlockPlaybackHookInit(void) {
+void NJSponsorBlockPlaybackHookInit(void) {
     if (!NJ_MASTER_SWITCH_VALUE) {
         return;
     }
