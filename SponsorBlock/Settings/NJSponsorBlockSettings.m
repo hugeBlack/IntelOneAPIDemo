@@ -6,7 +6,6 @@
 #import "NJSponsorBlockSettings.h"
 #import "../Models/NJSponsorBlockSegment.h"
 #import "NJCommonDefine.h"
-#import "NJSettingCache.h"
 
 NSNotificationName const NJSponsorBlockSettingsDidChangeNotification = @"NJSponsorBlockSettingsDidChangeNotification";
 

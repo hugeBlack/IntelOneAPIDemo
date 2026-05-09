@@ -10,7 +10,6 @@
 #import "../Models/NJSponsorBlockCacheStats.h"
 #import "NJSponsorBlockUnsubmittedSegmentStore.h"
 #import "../Settings/NJCommonDefine.h"
-#import "../Settings/NJSettingCache.h"
 #import <math.h>
 #import <objc/runtime.h>
 

@@ -9,7 +9,6 @@ extern "C"
 {
 #include "../Tweaks/Tweaks.h"
 #include "../Settings/NJCommonDefine.h"
-#include "../Settings/NJSettingCache.h"
 #include "../Services/NJSponsorBlockManager.h"
 #include "../UI/NJSponsorBlockPanelView.h"
 #include "../Models/NJSponsorBlockSegment.h"

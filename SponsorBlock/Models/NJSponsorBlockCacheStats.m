@@ -4,7 +4,6 @@
 //
 
 #import "NJSponsorBlockCacheStats.h"
-#import "../Settings/NJSettingCache.h"
 
 static NSString * const NJSponsorBlockCacheStatsKey = @"NJSponsorBlockCacheStatsKey";
 static NSString * const NJSponsorBlockCachePrefix = @"NJSponsorBlockSegments";
