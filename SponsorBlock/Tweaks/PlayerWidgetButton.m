@@ -7,10 +7,7 @@
 #include "Tweaks.h"
 #include "../UI/NJSponsorBlockPanelView.h"
 #include "../Settings/NJSponsorBlockSettings.h"
-
-void hook_BBPlayerFlexContainerWidget_viewWillDisappear(id self, SEL sel, bool animated) {
-    [NJSponsorBlockPanelView removePanel];
-}
+#import <objc/message.h>
 
 static const char* kTopWidgetClassNames[] = {
     "BBPlayerHalfScreenTopWidget",
@@ -22,7 +19,6 @@ static const char* kTopWidgetClassNames[] = {
 
 static void (*orig_setupSubWidgets[kTopWidgetClassCount])(BBPlayerWidget*, SEL);
 static Ivar rightControlWidgetIvars[kTopWidgetClassCount];
-static Ivar castButtonIvar;
 
 void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
     static dispatch_once_t onceToken;
@@ -30,7 +26,6 @@ void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
         for (int i = 0; i < kTopWidgetClassCount; i++) {
             rightControlWidgetIvars[i] = class_getInstanceVariable(objc_lookUpClass(kTopWidgetClassNames[i]), "_rightControlWidget");
         }
-        castButtonIvar = class_getInstanceVariable(PrivClass(BBPlayerCastBtnWidget), "_castBtn");
     });
     
     int classIndex = -1;
@@ -43,7 +38,6 @@ void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
 
     orig_setupSubWidgets[classIndex](self, sel);
 
-
     if (![NJSponsorBlockSettings enabled]) return;
     if (![NJSponsorBlockSettings showSharedEntryButton]) return;
     Ivar rightControlWidgetIvar = rightControlWidgetIvars[classIndex];
@@ -53,18 +47,17 @@ void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
         return;
     }
     
-    BBPlayerCastBtnWidget* fakeWidget = [[PrivClass(BBPlayerCastBtnWidget) alloc] initWithContext:nil];
+    BBPlayerCastBtnWidget* fakeWidget = [[PrivClass(OpenPanelButtonWidget) alloc] initWithContext:[self context]];
 
-    object_setIvar(fakeWidget, castButtonIvar, [NJSponsorBlockPanelView sharedEntryButton]);
-    
     [rightControlWidget addSubWidget:(BBPlayerWidget*)fakeWidget];
 }
 
+void registerOpenPanelButtonWidget(void);
+void registerSponsorBlockPanelWidget(void);
+
 void initPlayerWidgetButtonHooks(void) {
-    class_addMethod(objc_getClass("BBPlayerControlContainerWidgetView"),
-                    @selector(viewWillDisappear:),
-                    (IMP)hook_BBPlayerFlexContainerWidget_viewWillDisappear,
-                    "v@:B");
+    registerOpenPanelButtonWidget();
+    registerSponsorBlockPanelWidget();
 
     for (int i = 0; i < kTopWidgetClassCount; i++) {
         JRSwizzleInstanceMethod(objc_lookUpClass(kTopWidgetClassNames[i]),

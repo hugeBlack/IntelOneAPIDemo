@@ -14,5 +14,6 @@
 // SponsorBlock 设置页
 #define NJ_SPONSOR_BLOCK_BIZ_ID @"sponsorBlock"
 #define NJ_SPONSOR_BLOCK_SETTING_PAGE_BIZ_ID @"sponsorBlockSettingPage"
+#define NJ_OPEN_FLEX_BIZ_ID @"openFlexToolButton"
 
 #endif /* NJSettingDefine_h */

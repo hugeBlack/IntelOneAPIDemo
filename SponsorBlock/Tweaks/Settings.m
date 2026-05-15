@@ -38,6 +38,10 @@
 - (void)handleBizWithViewModel:(NJSettingSkullViewModel *)viewModel;
 @end
 
+@interface FLEXManager : NSObject
++ (instancetype)sharedManager;
+- (void)showExplorer;
+@end
 
 void (*orig_NJSettingBizHandler_handleBizWithViewModel)(NJSettingBizHandler* self, SEL sel, NJSettingSkullViewModel* viewModel) = nil;
 void hook_NJSettingBizHandler_handleBizWithViewModel(NJSettingBizHandler* self, SEL sel, NJSettingSkullViewModel* viewModel) {
@@ -45,6 +49,8 @@ void hook_NJSettingBizHandler_handleBizWithViewModel(NJSettingBizHandler* self, 
         NJSponsorBlockSettingViewController *settingVC = [[NJSponsorBlockSettingViewController alloc] init];
         [self.settingViewController.navigationController pushViewController:settingVC animated:YES];
         return;
+    } else if ([[viewModel bizId] isEqualToString:NJ_OPEN_FLEX_BIZ_ID]) {
+        [[PrivClass(FLEXManager) sharedManager] showExplorer];
     }
     orig_NJSettingBizHandler_handleBizWithViewModel(self, sel, viewModel);
 }
@@ -67,6 +73,14 @@ NSArray<NJSettingSkullViewModel *>* hook_NJSettingInjectDataProvider_injectDatas
 
     
     [datas insertObject:model atIndex:datas.count - 2];
+    
+    if(PrivClass(FLEXManager)) {
+        NJSettingSkullViewModel *model2 = [[PrivClass(NJSettingSkullViewModel) alloc] initWithBizId:NJ_OPEN_FLEX_BIZ_ID
+                                                                                     cellId:NJ_ARROW_CELL_ID
+                                                                                      title:@"Open FLEX tool"];
+        [datas addObject:model2];
+    }
+    
     return [datas copy];
 }
 

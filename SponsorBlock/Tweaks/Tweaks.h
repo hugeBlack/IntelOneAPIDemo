@@ -26,6 +26,7 @@ void swizzle(Class clazz, SEL originalAction, SEL swizzledAction);
 @property UIView* view;
 @property (readonly, weak, nonatomic) BBPlayerWidget *superWidget;
 @property (readonly, copy, nonatomic) NSArray *subWidgets;
+@property id context;
 - (void)addSubWidget:(BBPlayerWidget *)subWidget;
 - (void)willLayoutSubWidgets;
 @end

@@ -10,13 +10,10 @@ NS_ASSUME_NONNULL_BEGIN
 @interface NJSponsorBlockPanelView : UIView
 
 + (instancetype)sharedPanel;
-+ (UIButton *)sharedEntryButton;
-+ (nullable UIView *)currentHostView;
-+ (void)installInView:(UIView *)view;
 + (void)removePanel;
 + (void)hidePanelOnly;
 + (void)refresh;
-
+- (void)refreshContent;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -36,20 +36,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
     NJSponsorBlockPanelNoticeModeSubmissionDraft,
 };
 
-@interface NJSponsorBlockOverlayWindow : UIWindow
-@end
-
-@implementation NJSponsorBlockOverlayWindow
-
-- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
-    UIView *hitView = [super hitTest:point withEvent:event];
-    if (hitView == self.rootViewController.view) {
-        return nil;
-    }
-    return hitView;
-}
-
-@end
 
 @interface NJSponsorBlockPanelView () <UIGestureRecognizerDelegate>
 
@@ -77,7 +63,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, copy) NSString *submissionVideoID;
 @property (nonatomic, strong) NJSponsorBlockService *service;
 @property (nonatomic, strong) NSLayoutConstraint *noticeHeightConstraint;
-@property (nonatomic, strong) NSLayoutConstraint *segmentScrollHeightConstraint;
 @property (nonatomic, assign) NJSponsorBlockPanelNoticeMode noticeMode;
 @property (nonatomic, assign) NSTimeInterval submissionStartTime;
 @property (nonatomic, assign) NSTimeInterval submissionVideoDuration;
@@ -131,7 +116,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 
 @implementation NJSponsorBlockPanelView
 
-static NJSponsorBlockOverlayWindow *NJSponsorBlockSharedOverlayWindow;
 static UIViewController *NJSponsorBlockSharedOverlayController;
 static void *NJSponsorBlockManualSkipSegmentKey = &NJSponsorBlockManualSkipSegmentKey;
 static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
@@ -145,180 +129,12 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     return panel;
 }
 
-+ (UIView *)currentHostView {
-    UIView *overlayHostView = [self overlayHostView];
-    if (overlayHostView) {
-        return overlayHostView;
-    }
-
-    NSArray<UIWindow *> *windows = @[];
-    if (@available(iOS 13.0, *)) {
-        UIWindowScene *scene = [self activeWindowScene];
-        if (scene) {
-            windows = scene.windows;
-        }
-    }
-    if (windows.count == 0) {
-        UIWindow *keyWindow = nil;
-        for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if ([scene isKindOfClass:UIWindowScene.class] && scene.activationState == UISceneActivationStateForegroundActive) {
-                for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-                    if (window.isKeyWindow) { keyWindow = window; break; }
-                }
-            }
-        }
-        if (keyWindow) { return keyWindow; }
-        return nil;
-    }
-
-    UIWindow *bestWindow = nil;
-    for (UIWindow *window in windows) {
-        if (window.hidden || window.alpha <= 0.01 || CGRectIsEmpty(window.bounds)) {
-            continue;
-        }
-        if (window.windowLevel != UIWindowLevelNormal && window.windowLevel != UIWindowLevelStatusBar) {
-            continue;
-        }
-        bestWindow = window;
-    }
-    if (!bestWindow) {
-        bestWindow = windows.firstObject;
-    }
-    return bestWindow;
-}
-
-+ (UIView *)overlayHostView {
-    if (![NSThread isMainThread]) {
-        return nil;
-    }
-
-    if (!NJSponsorBlockSharedOverlayController) {
-        NJSponsorBlockSharedOverlayController = [[UIViewController alloc] init];
-        NJSponsorBlockSharedOverlayController.view.backgroundColor = UIColor.clearColor;
-        NJSponsorBlockSharedOverlayController.view.userInteractionEnabled = YES;
-    }
-
-    if (!NJSponsorBlockSharedOverlayWindow) {
-        CGRect frame = UIScreen.mainScreen.bounds;
-        NJSponsorBlockSharedOverlayWindow = [[NJSponsorBlockOverlayWindow alloc] initWithFrame:frame];
-        NJSponsorBlockSharedOverlayWindow.backgroundColor = UIColor.clearColor;
-        NJSponsorBlockSharedOverlayWindow.windowLevel = UIWindowLevelStatusBar + 20.0;
-        NJSponsorBlockSharedOverlayWindow.rootViewController = NJSponsorBlockSharedOverlayController;
-        NJSponsorBlockSharedOverlayWindow.hidden = NO;
-        NSLog(@"[NJSponsorBlock] overlay window created %@", NJSponsorBlockSharedOverlayWindow);
-    }
-
-    if (@available(iOS 13.0, *)) {
-        UIWindowScene *activeScene = [self activeWindowScene];
-        if (activeScene && NJSponsorBlockSharedOverlayWindow.windowScene != activeScene) {
-            NJSponsorBlockSharedOverlayWindow.windowScene = activeScene;
-        }
-    }
-
-    NJSponsorBlockSharedOverlayWindow.frame = UIScreen.mainScreen.bounds;
-    NJSponsorBlockSharedOverlayWindow.hidden = NO;
-    [NJSponsorBlockSharedOverlayWindow bringSubviewToFront:NJSponsorBlockSharedOverlayController.view];
-    return NJSponsorBlockSharedOverlayController.view;
-}
-
-+ (UIWindowScene *)activeWindowScene API_AVAILABLE(ios(13.0)) {
-    NSSet<UIScene *> *scenes = UIApplication.sharedApplication.connectedScenes;
-    for (UIScene *scene in scenes) {
-        if (![scene isKindOfClass:UIWindowScene.class]) {
-            continue;
-        }
-        if (scene.activationState == UISceneActivationStateForegroundActive) {
-            return (UIWindowScene *)scene;
-        }
-    }
-    for (UIScene *scene in scenes) {
-        if ([scene isKindOfClass:UIWindowScene.class]) {
-            return (UIWindowScene *)scene;
-        }
-    }
-    return nil;
-}
-
-+ (UIButton *)sharedEntryButton {
-    static UIButton *button = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        button = [UIButton buttonWithType:UIButtonTypeCustom];
-        button.frame = CGRectMake(0, 0, 38, 38);
-        button.accessibilityIdentifier = @"NJSponsorBlockEntryButton";
-//        button.backgroundColor = [UIColor colorWithWhite:0 alpha:0.36];
-//        button.layer.cornerRadius = 19;
-//        button.layer.borderWidth = 1;
-//        button.layer.borderColor = [UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:0.95].CGColor;
-        button.titleLabel.font = [UIFont boldSystemFontOfSize:23];
-        [button setTitle:@"▷" forState:UIControlStateNormal];
-        [button setTitleColor:[UIColor colorWithRed:0.02 green:0.78 blue:1 alpha:1] forState:UIControlStateNormal];
-        [button addTarget:self action:@selector(togglePanelFromEntryButton:) forControlEvents:UIControlEventTouchUpInside];
-    });
-    return button;
-}
-
-+ (void)installInView:(UIView *)view {
-    if (!view || !NJ_MASTER_SWITCH_VALUE) {
-        return;
-    }
-
-    NJSponsorBlockPanelView *panel = [self sharedPanel];
-    if (panel.superview != view) {
-        [panel removeFromSuperview];
-        [view addSubview:panel];
-    }
-    [view bringSubviewToFront:panel];
-    [panel keepInsideSuperview];
-    [panel refreshContent];
-}
-
 + (void)removePanel {
     [[self sharedPanel] removeFromSuperview];
 }
 
 + (void)refresh {
     [[self sharedPanel] refreshContent];
-}
-
-+ (void)togglePanelFromEntryButton:(UIButton *)button {
-    UIView *view = [self panelHostViewForEntryButton:button];
-    if (!view) {
-        return;
-    }
-
-    NJSponsorBlockPanelView *panel = [self sharedPanel];
-    if (panel.superview) {
-        [self hidePanelAnimated];
-        return;
-    }
-
-    [self installInView:view];
-    CGRect buttonFrame = [view convertRect:button.bounds fromView:button];
-    CGRect frame = panel.frame;
-    CGFloat spacing = 8.0;
-    frame.origin.x = CGRectGetMaxX(buttonFrame) - CGRectGetWidth(frame);
-    frame.origin.y = CGRectGetMaxY(buttonFrame) + spacing;
-
-    CGFloat minX = NJSponsorBlockPanelMargin;
-    CGFloat maxX = CGRectGetWidth(view.bounds) - CGRectGetWidth(frame) - NJSponsorBlockPanelMargin;
-    CGFloat minY = NJSponsorBlockPanelTopMargin;
-    CGFloat maxY = CGRectGetHeight(view.bounds) - CGRectGetHeight(frame) - NJSponsorBlockPanelBottomMargin;
-    frame.origin.x = MIN(MAX(minX, frame.origin.x), MAX(minX, maxX));
-    frame.origin.y = MIN(MAX(minY, frame.origin.y), MAX(minY, maxY));
-    panel.frame = frame;
-    [panel keepInsideSuperview];
-    [self showPanelAnimated:panel];
-}
-
-+ (UIView *)panelHostViewForEntryButton:(UIButton *)button {
-    if (button.window) {
-        return button.window;
-    }
-    if (button.superview) {
-        return button.superview;
-    }
-    return [self currentHostView];
 }
 
 + (void)showPanelAnimated:(NJSponsorBlockPanelView *)panel {
@@ -351,17 +167,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         panel.transform = CGAffineTransformIdentity;
     }];
 }
-
-+ (void)layoutEntryButton:(UIButton *)button inView:(UIView *)view {
-    UIEdgeInsets insets = view.safeAreaInsets;
-    CGRect bounds = view.bounds;
-    BOOL portrait = CGRectGetHeight(bounds) >= CGRectGetWidth(bounds);
-
-    CGFloat x = CGRectGetWidth(bounds) - insets.right - 132.0;
-    CGFloat y = portrait ? insets.top + 64.0 : insets.top + 22.0;
-    button.frame = CGRectMake(MAX(insets.left + 8.0, x), y, 38.0, 38.0);
-}
-
 
 + (UIColor *)colorForCategory:(NSString *)category {
     return [NJSponsorBlockSettings colorForCategory:category];
@@ -419,13 +224,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)setupViews {
     self.backgroundColor = [UIColor colorWithWhite:0.06 alpha:0.86];
-    self.layer.cornerRadius = 14.0;
     self.layer.borderWidth = 0.5;
     self.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.16].CGColor;
-    self.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.layer.shadowOpacity = 0.28;
-    self.layer.shadowRadius = 18.0;
-    self.layer.shadowOffset = CGSizeMake(0, 8);
     self.layer.masksToBounds = NO;
 
     self.iconLabel = [[UILabel alloc] init];
@@ -545,12 +345,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self.closeButton addTarget:self action:@selector(closePanelTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.closeButton];
 
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    pan.delegate = self;
-    [self addGestureRecognizer:pan];
-
     self.noticeHeightConstraint = [self.noticeView.heightAnchor constraintEqualToConstant:0];
-    self.segmentScrollHeightConstraint = [self.segmentScrollView.heightAnchor constraintEqualToConstant:NJSponsorBlockSegmentEmptyHeight];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.iconLabel.widthAnchor constraintEqualToConstant:34],
@@ -582,7 +377,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self.segmentScrollView.topAnchor constraintEqualToAnchor:self.noticeView.bottomAnchor constant:10],
         [self.segmentScrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
         [self.segmentScrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12],
-        self.segmentScrollHeightConstraint,
         [self.segmentStackView.topAnchor constraintEqualToAnchor:self.segmentScrollView.topAnchor],
         [self.segmentStackView.leadingAnchor constraintEqualToAnchor:self.segmentScrollView.leadingAnchor],
         [self.segmentStackView.trailingAnchor constraintEqualToAnchor:self.segmentScrollView.trailingAnchor],
@@ -623,7 +417,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self updateNoticeWithManager:manager segments:segments];
         [self rebuildSegmentRowsWithSegments:segments manager:manager];
         [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
-        [self resizeForContent];
     }
 }
 
@@ -1139,7 +932,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
                   detail:[NSString stringWithFormat:@"%@ · 起点 %@", [self titleForCategory:category], [self stringFromTime:currentTime]]
             primaryTitle:@"终点提交"
           secondaryTitle:@"取消"];
-    [self resizeForContent];
 }
 
 - (void)confirmPOISubmissionWithCategory:(NSString *)category sourceView:(UIView *)sourceView {
@@ -1250,7 +1042,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.submissionVideoDuration = 0;
     self.submissionStartTime = 0;
     [self hideNotice];
-    [self resizeForContent];
 }
 
 - (void)saveDraftSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType {
@@ -1294,14 +1085,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (UIViewController *)presentationViewController {
-    UIViewController *controller = NJSponsorBlockSharedOverlayController;
-    if (!controller) {
-        controller = [[[self class] currentHostView] window].rootViewController;
-    }
-    while (controller.presentedViewController && ![controller.presentedViewController isKindOfClass:UIAlertController.class]) {
-        controller = controller.presentedViewController;
-    }
-    return controller;
+    // https://stackoverflow.com/a/12418527
+    return [[[[UIApplication sharedApplication] delegate] window] rootViewController];
 }
 
 - (NJSponsorBlockSegment *)segmentFromSender:(id)sender {
@@ -1422,67 +1207,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockSeekRequestNotification object:@(segment.startTime)];
-}
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    if ([touch.view isKindOfClass:[UIControl class]]) {
-        return NO;
-    }
-    return YES;
-}
-
-- (void)handlePan:(UIPanGestureRecognizer *)pan {
-    UIView *superview = self.superview;
-    if (!superview) {
-        return;
-    }
-
-    CGPoint translation = [pan translationInView:superview];
-    self.center = CGPointMake(self.center.x + translation.x, self.center.y + translation.y);
-    [pan setTranslation:CGPointZero inView:superview];
-    if (pan.state == UIGestureRecognizerStateEnded || pan.state == UIGestureRecognizerStateCancelled) {
-        [self keepInsideSuperview];
-    }
-}
-
-- (void)resizeForContent {
-    UIView *superview = self.superview;
-    if (!superview) {
-        return;
-    }
-
-    CGFloat contentHeight = [self segmentRowsContentHeight];
-    CGFloat listHeight = MIN(contentHeight, NJSponsorBlockSegmentListMaxHeight);
-    self.segmentScrollHeightConstraint.constant = listHeight;
-    self.segmentScrollView.scrollEnabled = contentHeight > listHeight + 1.0;
-
-    CGFloat height = NJSponsorBlockPanelChromeHeight + listHeight + (self.noticeView.hidden ? 0 : 52.0);
-
-    CGRect frame = self.frame;
-    CGFloat availableWidth = CGRectGetWidth(superview.bounds) - NJSponsorBlockPanelMargin * 2.0;
-    frame.size.width = MIN(NJSponsorBlockPanelWidth, availableWidth);
-    frame.size.width = MAX(240.0, frame.size.width);
-    frame.size.height = height;
-    self.frame = frame;
-    [self keepInsideSuperview];
-}
-
-- (void)keepInsideSuperview {
-    UIView *superview = self.superview;
-    if (!superview) {
-        return;
-    }
-
-    UIEdgeInsets insets = UIEdgeInsetsMake(NJSponsorBlockPanelTopMargin,
-                                           NJSponsorBlockPanelMargin,
-                                           NJSponsorBlockPanelBottomMargin,
-                                           NJSponsorBlockPanelMargin);
-    CGRect frame = self.frame;
-    CGFloat maxX = CGRectGetWidth(superview.bounds) - insets.right - CGRectGetWidth(frame);
-    CGFloat maxY = CGRectGetHeight(superview.bounds) - insets.bottom - CGRectGetHeight(frame);
-    frame.origin.x = MIN(MAX(insets.left, frame.origin.x), MAX(insets.left, maxX));
-    frame.origin.y = MIN(MAX(insets.top, frame.origin.y), MAX(insets.top, maxY));
-    self.frame = frame;
 }
 
 - (NSTimeInterval)durationForSegment:(NJSponsorBlockSegment *)segment {
