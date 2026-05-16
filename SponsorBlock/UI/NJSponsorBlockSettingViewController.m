@@ -68,7 +68,7 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         case NJSponsorBlockSettingSectionBehavior:
             return 3;
         case NJSponsorBlockSettingSectionUI:
-            return 4;
+            return 6;
         case NJSponsorBlockSettingSectionCategories:
             return [NJSponsorBlockSettings categoryOptions].count;
         case NJSponsorBlockSettingSectionColors:
@@ -365,8 +365,20 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         return;
     }
-    cell.textLabel.text = @"显示缩略图标签";
-    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showVideoLabels] tag:108];
+    if (row == 3) {
+        cell.textLabel.text = @"显示缩略图标签";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showVideoLabels] tag:108];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return;
+    }
+    if (row == 4) {
+        cell.textLabel.text = @"显示即将自动跳过提示";
+        cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showAutoSkipToast] tag:109];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return;
+    }
+    cell.textLabel.text = @"显示已跳过片段/撤销提示";
+    cell.accessoryView = [self switchWithOn:[NJSponsorBlockSettings showSkipUndoToast] tag:110];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
 }
 
@@ -509,6 +521,10 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [NJSponsorBlockSettings setShowSharedEntryButton:aSwitch.on];
     } else if (aSwitch.tag == 108) {
         [NJSponsorBlockSettings setShowVideoLabels:aSwitch.on];
+    } else if (aSwitch.tag == 109) {
+        [NJSponsorBlockSettings setShowAutoSkipToast:aSwitch.on];
+    } else if (aSwitch.tag == 110) {
+        [NJSponsorBlockSettings setShowSkipUndoToast:aSwitch.on];
     }
     [self.tableView reloadData];
 }

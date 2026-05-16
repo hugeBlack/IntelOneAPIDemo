@@ -26,16 +26,6 @@ static CGFloat const NJSponsorBlockSegmentEmptyHeight = 30.0;
 static CGFloat const NJSponsorBlockSegmentListMaxHeight = 250.0;
 static CGFloat const NJSponsorBlockPanelChromeHeight = 134.0;
 
-typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
-    NJSponsorBlockPanelNoticeModeNone = 0,
-    NJSponsorBlockPanelNoticeModeAdvance,
-    NJSponsorBlockPanelNoticeModeManualSkip,
-    NJSponsorBlockPanelNoticeModeSkipped,
-    NJSponsorBlockPanelNoticeModeMessage,
-    NJSponsorBlockPanelNoticeModeSubmissionDraft,
-};
-
-
 @interface NJSponsorBlockPanelView () <UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong) UIStackView *headerStack;
@@ -46,46 +36,22 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, strong) UIScrollView *segmentScrollView;
 @property (nonatomic, strong) UIStackView *segmentStackView;
 @property (nonatomic, strong) UIView *progressView;
-@property (nonatomic, strong) UIView *noticeView;
-@property (nonatomic, strong) UILabel *noticeTitleLabel;
-@property (nonatomic, strong) UILabel *noticeDetailLabel;
-@property (nonatomic, strong) UIButton *noticePrimaryButton;
-@property (nonatomic, strong) UIButton *noticeSecondaryButton;
-@property (nonatomic, strong) UIButton *noticeCloseButton;
 @property (nonatomic, strong) UIButton *closeButton;
 @property (nonatomic, strong) UIButton *toggleButton;
 @property (nonatomic, strong) UIButton *submitButton;
 @property (nonatomic, strong) UILabel *statsLabel;
-@property (nonatomic, strong) NJSponsorBlockSegment *noticeSegment;
-@property (nonatomic, copy) NSString *suppressedNoticeUUID;
-@property (nonatomic, copy) NSString *submissionCategory;
-@property (nonatomic, copy) NSString *submissionVideoID;
 @property (nonatomic, strong) NJSponsorBlockService *service;
-@property (nonatomic, strong) NSLayoutConstraint *noticeHeightConstraint;
-@property (nonatomic, assign) NJSponsorBlockPanelNoticeMode noticeMode;
-@property (nonatomic, assign) NSTimeInterval submissionStartTime;
-@property (nonatomic, assign) NSTimeInterval submissionVideoDuration;
-@property (nonatomic, assign) NSInteger submissionCID;
-@property (nonatomic, assign) BOOL submissionInProgress;
-@property (nonatomic, assign) BOOL submissionRequestInFlight;
 @property (nonatomic, strong) UIView *progressPlayheadView;
 @property (nonatomic, copy) NSArray<NJSponsorBlockSegment *> *displayedSegments;
 @property (nonatomic, copy) NSArray<UIView *> *segmentRowViews;
 
 @property (nonatomic, weak) NJSponsorBlockManager* manager;
 
-- (UIButton *)noticeButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action;
 - (UIButton *)actionButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action segment:(NJSponsorBlockSegment *)segment;
 - (void)updateHeaderWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (void)updateEnabledButton:(BOOL)enabled;
 - (void)updateFooterWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments;
-- (void)updateNoticeWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (void)rebuildSegmentRowsWithSegments:(NSArray<NJSponsorBlockSegment *> *)segments manager:(NJSponsorBlockManager *)manager;
-- (void)showNoticeMode:(NJSponsorBlockPanelNoticeMode)mode segment:(NJSponsorBlockSegment *)segment title:(NSString *)title detail:(NSString *)detail primaryTitle:(NSString *)primaryTitle secondaryTitle:(NSString *)secondaryTitle;
-- (void)showTransientMessage:(NSString *)title detail:(NSString *)detail;
-- (void)hideNotice;
-- (BOOL)noticeSuppressedForSegment:(NJSponsorBlockSegment *)segment;
-- (void)suppressCurrentNoticeSegment;
 - (NJSponsorBlockSegment *)segmentFromSender:(id)sender;
 - (void)voteForSegment:(NJSponsorBlockSegment *)segment type:(NSInteger)type;
 - (void)submitSegmentTapped:(UIButton *)button;
@@ -95,14 +61,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 - (void)presentSubmissionManager;
 - (void)submitCurrentVideoDraftsFromPanel;
 - (void)beginSubmissionWithCategory:(NSString *)category;
-- (void)confirmPOISubmissionWithCategory:(NSString *)category sourceView:(UIView *)sourceView;
-- (void)finishSubmissionAtCurrentTime;
-- (void)cancelSubmissionDraft;
-- (void)saveDraftSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType;
-- (BOOL)currentPlaybackTimeIsValid:(NSTimeInterval)time;
-- (NSArray<NSNumber *> *)roundedSegmentFromStart:(NSTimeInterval)start end:(NSTimeInterval)end;
-- (NSNumber *)roundedTimeNumber:(NSTimeInterval)time;
-- (NSString *)submissionActionTypeForCategory:(NSString *)category;
 - (UIViewController *)presentationViewController;
 - (NSTimeInterval)durationForSegment:(NJSponsorBlockSegment *)segment;
 - (CGFloat)segmentRowsContentHeight;
@@ -153,17 +111,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-- (UIButton *)noticeButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    [button setTitle:title forState:UIControlStateNormal];
-    [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
-    button.backgroundColor = color;
-    button.layer.cornerRadius = 6;
-    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
-    return button;
-}
-
 - (UIButton *)actionButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action segment:(NJSponsorBlockSegment *)segment {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     [button setTitle:title forState:UIControlStateNormal];
@@ -207,44 +154,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.headerStack.spacing = 8;
     self.headerStack.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:self.headerStack];
-
-    self.noticeView = [[UIView alloc] init];
-    self.noticeView.backgroundColor = [UIColor colorWithRed:0.02 green:0.18 blue:0.24 alpha:0.94];
-    self.noticeView.layer.cornerRadius = 10;
-    self.noticeView.layer.borderWidth = 0.5;
-    self.noticeView.layer.borderColor = [UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:0.45].CGColor;
-    self.noticeView.hidden = YES;
-    self.noticeView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self addSubview:self.noticeView];
-
-    self.noticeTitleLabel = [[UILabel alloc] init];
-    self.noticeTitleLabel.textColor = UIColor.whiteColor;
-    self.noticeTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
-
-    self.noticeDetailLabel = [[UILabel alloc] init];
-    self.noticeDetailLabel.textColor = [UIColor colorWithWhite:0.78 alpha:1];
-    self.noticeDetailLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
-    self.noticeDetailLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-
-    self.noticePrimaryButton = [self noticeButtonWithTitle:@"" color:[UIColor colorWithRed:0.02 green:0.70 blue:0.95 alpha:0.95] action:@selector(noticePrimaryTapped:)];
-    self.noticeSecondaryButton = [self noticeButtonWithTitle:@"" color:[UIColor colorWithWhite:0.32 alpha:0.95] action:@selector(noticeSecondaryTapped:)];
-    self.noticeCloseButton = [self noticeButtonWithTitle:@"×" color:[UIColor clearColor] action:@selector(noticeCloseTapped:)];
-
-    UIStackView *noticeTextStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.noticeTitleLabel, self.noticeDetailLabel]];
-    noticeTextStack.axis = UILayoutConstraintAxisVertical;
-    noticeTextStack.spacing = 2;
-
-    UIStackView *noticeButtonStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.noticePrimaryButton, self.noticeSecondaryButton, self.noticeCloseButton]];
-    noticeButtonStack.axis = UILayoutConstraintAxisHorizontal;
-    noticeButtonStack.alignment = UIStackViewAlignmentCenter;
-    noticeButtonStack.spacing = 5;
-
-    UIStackView *noticeStack = [[UIStackView alloc] initWithArrangedSubviews:@[noticeTextStack, noticeButtonStack]];
-    noticeStack.axis = UILayoutConstraintAxisHorizontal;
-    noticeStack.alignment = UIStackViewAlignmentCenter;
-    noticeStack.spacing = 8;
-    noticeStack.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.noticeView addSubview:noticeStack];
 
     self.segmentScrollView = [[UIScrollView alloc] init];
     self.segmentScrollView.showsVerticalScrollIndicator = YES;
@@ -300,17 +209,12 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self.closeButton addTarget:self action:@selector(closePanelTapped:) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:self.closeButton];
 
-    self.noticeHeightConstraint = [self.noticeView.heightAnchor constraintEqualToConstant:0];
-
     [NSLayoutConstraint activateConstraints:@[
         [self.iconLabel.widthAnchor constraintEqualToConstant:34],
         [self.toggleButton.widthAnchor constraintEqualToConstant:70],
         [self.toggleButton.heightAnchor constraintEqualToConstant:30],
         [self.submitButton.widthAnchor constraintEqualToConstant:52],
         [self.submitButton.heightAnchor constraintEqualToConstant:30],
-        [self.noticePrimaryButton.widthAnchor constraintEqualToConstant:52],
-        [self.noticeSecondaryButton.widthAnchor constraintEqualToConstant:58],
-        [self.noticeCloseButton.widthAnchor constraintEqualToConstant:24],
 
         [self.closeButton.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
         [self.closeButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8],
@@ -321,15 +225,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self.headerStack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
         [self.headerStack.trailingAnchor constraintEqualToAnchor:self.closeButton.leadingAnchor constant:-4],
 
-        [self.noticeView.topAnchor constraintEqualToAnchor:self.headerStack.bottomAnchor constant:10],
-        [self.noticeView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
-        [self.noticeView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12],
-        self.noticeHeightConstraint,
-        [noticeStack.leadingAnchor constraintEqualToAnchor:self.noticeView.leadingAnchor constant:8],
-        [noticeStack.trailingAnchor constraintEqualToAnchor:self.noticeView.trailingAnchor constant:-6],
-        [noticeStack.centerYAnchor constraintEqualToAnchor:self.noticeView.centerYAnchor],
-
-        [self.segmentScrollView.topAnchor constraintEqualToAnchor:self.noticeView.bottomAnchor constant:10],
+        [self.segmentScrollView.topAnchor constraintEqualToAnchor:self.headerStack.bottomAnchor constant:10],
         [self.segmentScrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
         [self.segmentScrollView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-12],
         [self.segmentStackView.topAnchor constraintEqualToAnchor:self.segmentScrollView.topAnchor],
@@ -367,7 +263,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self updateHeaderWithManager:manager segments:segments];
     [self updateEnabledButton:[NJSponsorBlockSettings enabled]];
     [self updateFooterWithManager:manager segments:segments];
-    [self updateNoticeWithManager:manager segments:segments];
     [self rebuildSegmentRowsWithSegments:segments manager:manager];
     [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
     
@@ -388,7 +283,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self.toggleButton setTitle:(enabled ? @"启用" : @"关闭") forState:UIControlStateNormal];
     self.toggleButton.backgroundColor = enabled ? [UIColor colorWithRed:0 green:0.70 blue:0.05 alpha:1] : [UIColor colorWithWhite:0.30 alpha:1];
     [self.toggleButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.submitButton.enabled = enabled && !self.submissionRequestInFlight;
+    self.submitButton.enabled = enabled && !_manager.isSubmissionInFlight;
     self.submitButton.alpha = self.submitButton.enabled ? 1.0 : 0.45;
 }
 
@@ -399,76 +294,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.statsLabel.text = [NSString stringWithFormat:@"%@ · 省 %@",
                             segmentCountText,
                             [self compactStringFromTime:skippedDuration]];
-}
-
-- (void)updateNoticeWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments {
-    (void)segments;
-    if (![NJSponsorBlockSettings enabled]) {
-        [self hideNotice];
-        return;
-    }
-
-    NSTimeInterval currentTime = manager.currentPlaybackTime;
-    if (self.submissionRequestInFlight) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeMessage
-                     segment:nil
-                       title:@"正在提交"
-                      detail:@"请稍候"
-                primaryTitle:nil
-              secondaryTitle:nil];
-        return;
-    }
-
-    if (self.submissionInProgress) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                     segment:nil
-                       title:@"已记录起点"
-                      detail:[NSString stringWithFormat:@"%@ · 起点 %@",
-                              [self titleForCategory:self.submissionCategory],
-                              [self stringFromTime:self.submissionStartTime]]
-                primaryTitle:@"终点提交"
-              secondaryTitle:@"取消"];
-        return;
-    }
-
-    NJSponsorBlockSegment *manualSegment = [manager manualSkipSegmentAtPlaybackTime:currentTime];
-    if (manualSegment && ![self noticeSuppressedForSegment:manualSegment]) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeManualSkip
-                     segment:manualSegment
-                       title:@"可手动跳过"
-                      detail:[self detailTextForSegment:manualSegment currentTime:currentTime]
-                primaryTitle:@"跳过"
-              secondaryTitle:@"隐藏"];
-        return;
-    }
-
-    NSTimeInterval advanceSeconds = [NJSponsorBlockSettings advanceNoticeDuration];
-    NJSponsorBlockSegment *upcomingSegment = [manager upcomingAutoSkipSegmentAtPlaybackTime:currentTime withinSeconds:advanceSeconds];
-    if (upcomingSegment && ![self noticeSuppressedForSegment:upcomingSegment]) {
-        NSTimeInterval remaining = MAX(0, upcomingSegment.startTime - currentTime);
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeAdvance
-                     segment:upcomingSegment
-                       title:@"即将自动跳过"
-                      detail:[NSString stringWithFormat:@"%@ · 还有 %@",
-                              [self titleForCategory:upcomingSegment.category],
-                              [self compactStringFromTime:remaining]]
-                primaryTitle:@"立即"
-              secondaryTitle:@"本次不跳"];
-        return;
-    }
-
-    NJSponsorBlockSegment *lastSkippedSegment = [manager lastSkippedSegment];
-    if (lastSkippedSegment && ![self noticeSuppressedForSegment:lastSkippedSegment]) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSkipped
-                     segment:lastSkippedSegment
-                       title:@"已跳过片段"
-                      detail:[self detailTextForSegment:lastSkippedSegment currentTime:currentTime]
-                primaryTitle:@"撤销"
-              secondaryTitle:nil];
-        return;
-    }
-
-    [self hideNotice];
 }
 
 - (void)rebuildSegmentRowsWithSegments:(NSArray<NJSponsorBlockSegment *> *)segments manager:(NJSponsorBlockManager *)manager {
@@ -494,51 +319,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
             [self.segmentScrollView scrollRectToVisible:activeRow.frame animated:NO];
         });
     }
-}
-
-- (BOOL)noticeSuppressedForSegment:(NJSponsorBlockSegment *)segment {
-    return segment.uuid.length > 0 && [segment.uuid isEqualToString:self.suppressedNoticeUUID];
-}
-
-- (void)suppressCurrentNoticeSegment {
-    self.suppressedNoticeUUID = self.noticeSegment.uuid.length > 0 ? self.noticeSegment.uuid : nil;
-}
-
-- (void)showNoticeMode:(NJSponsorBlockPanelNoticeMode)mode
-               segment:(NJSponsorBlockSegment *)segment
-                 title:(NSString *)title
-                detail:(NSString *)detail
-          primaryTitle:(NSString *)primaryTitle
-        secondaryTitle:(NSString *)secondaryTitle {
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideNotice) object:nil];
-    self.noticeMode = mode;
-    self.noticeSegment = segment;
-    self.noticeTitleLabel.text = title;
-    self.noticeDetailLabel.text = detail;
-    [self.noticePrimaryButton setTitle:primaryTitle ?: @"" forState:UIControlStateNormal];
-    [self.noticeSecondaryButton setTitle:secondaryTitle ?: @"" forState:UIControlStateNormal];
-    self.noticePrimaryButton.hidden = primaryTitle.length == 0;
-    self.noticeSecondaryButton.hidden = secondaryTitle.length == 0;
-    self.noticeView.hidden = NO;
-    self.noticeHeightConstraint.constant = 52;
-}
-
-- (void)showTransientMessage:(NSString *)title detail:(NSString *)detail {
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideNotice) object:nil];
-    [self showNoticeMode:NJSponsorBlockPanelNoticeModeMessage
-                 segment:nil
-                   title:title
-                  detail:detail
-            primaryTitle:nil
-          secondaryTitle:nil];
-    [self performSelector:@selector(hideNotice) withObject:nil afterDelay:2.0];
-}
-
-- (void)hideNotice {
-    self.noticeMode = NJSponsorBlockPanelNoticeModeNone;
-    self.noticeSegment = nil;
-    self.noticeView.hidden = YES;
-    self.noticeHeightConstraint.constant = 0;
 }
 
 - (void)clearSegmentRows {
@@ -567,7 +347,6 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
     if (self.superview) {
         NSArray<NJSponsorBlockSegment *> *segments = self.displayedSegments ?: @[];
-        [self updateNoticeWithManager:manager segments:segments];
         [self updateFooterWithManager:manager segments:segments];
         [self updateProgressPlayheadForTime:time duration:duration];
         [self updateSegmentRowHighlightsForTime:time manager:manager];
@@ -732,25 +511,23 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)submitSegmentTapped:(UIButton *)button {
     if (![NJSponsorBlockSettings enabled]) {
-        [self showTransientMessage:@"无法提交" detail:@"请先启用 SponsorBlock"];
+        [_manager showInfoToast:@"无法提交" detail:@"请先启用 SponsorBlock"];
         return;
     }
-    if (self.submissionRequestInFlight) {
-        [self showTransientMessage:@"正在提交" detail:@"请等待当前请求完成"];
+    if (_manager.isSubmissionInFlight) {
+        [_manager showInfoToast:@"正在提交" detail:@"请等待当前请求完成"];
         return;
     }
-    if (self.submissionInProgress) {
-        [self refreshContent];
-        return;
+    if (_manager.submissionDraftInProgress) {
+        return; // 提交草稿流程由 Manager 的 Toast 管理
     }
-
     [self presentSubmissionMenuFromView:button];
 }
 
 - (void)presentSubmissionMenuFromView:(UIView *)sourceView {
     UIViewController *presenter = [self presentationViewController];
     if (!presenter) {
-        [self showTransientMessage:@"无法提交" detail:@"无法打开提交菜单"];
+        [_manager showInfoToast:@"无法提交" detail:@"无法打开提交菜单"];
         return;
     }
 
@@ -760,9 +537,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"新增片段草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || ![strongSelf validateCurrentVideoForDraftCreation]) {
-            return;
-        }
+
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [strongSelf presentSubmissionCategoryPickerFromView:sourceView];
         });
@@ -783,29 +558,9 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [presenter presentViewController:alert animated:YES completion:nil];
 }
 
-- (BOOL)validateCurrentVideoForDraftCreation {
-    NJSponsorBlockManager *manager = _manager;
-    if (manager.videoID.length == 0 || manager.cid <= 0) {
-        [self showTransientMessage:@"无法提交" detail:@"尚未识别当前视频"];
-        return NO;
-    }
-    if (![self currentPlaybackTimeIsValid:manager.currentPlaybackTime]) {
-        [self showTransientMessage:@"无法提交" detail:@"无法获取当前播放时间"];
-        return NO;
-    }
-    if (manager.estimatedVideoDuration <= 0 || !isfinite(manager.estimatedVideoDuration)) {
-        [self showTransientMessage:@"无法提交" detail:@"暂未获取视频时长，稍后再试"];
-        return NO;
-    }
-    return YES;
-}
 
 - (void)presentSubmissionCategoryPickerFromView:(UIView *)sourceView {
     UIViewController *presenter = [self presentationViewController];
-    if (!presenter) {
-        [self showTransientMessage:@"无法提交" detail:@"无法打开分类选择"];
-        return;
-    }
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新增片段草稿"
                                                                    message:@"选择本次草稿的片段分类"
@@ -817,13 +572,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
             if (!strongSelf) {
                 return;
             }
-            if ([option.category isEqualToString:@"poi_highlight"]) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [strongSelf confirmPOISubmissionWithCategory:option.category sourceView:sourceView];
-                });
-            } else {
-                [strongSelf beginSubmissionWithCategory:option.category];
-            }
+            [strongSelf->_manager beginSubmissionDraftWithCategory:option.category];
+            
         }]];
     }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -834,207 +584,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)presentSubmissionManager {
     UIViewController *presenter = [self presentationViewController];
-    if (!presenter) {
-        [self showTransientMessage:@"无法打开" detail:@"无法打开未提交片段管理"];
-        return;
-    }
+
     NJSponsorBlockSubmissionManagerViewController *controller = [[NJSponsorBlockSubmissionManagerViewController alloc] initWithManager:_manager];
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:controller];
     navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
     [presenter presentViewController:navigationController animated:YES completion:nil];
-}
-
-- (void)submitCurrentVideoDraftsFromPanel {
-    if (self.submissionRequestInFlight) {
-        return;
-    }
-    self.submissionRequestInFlight = YES;
-    [self refreshContent];
-    __weak typeof(self) weakSelf = self;
-    [_manager submitUnsubmittedSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) {
-                return;
-            }
-            strongSelf.submissionRequestInFlight = NO;
-            [strongSelf showTransientMessage:(success ? @"提交成功" : @"提交失败")
-                                      detail:(success ? @"当前视频草稿已提交" : (error.localizedDescription ?: @"请稍后重试"))];
-            [strongSelf refreshContent];
-        });
-    }];
-}
-
-- (void)beginSubmissionWithCategory:(NSString *)category {
-    NJSponsorBlockManager *manager = _manager;
-    NSTimeInterval currentTime = manager.currentPlaybackTime;
-    if (![self currentPlaybackTimeIsValid:currentTime]) {
-        [self showTransientMessage:@"无法提交" detail:@"无法获取当前播放时间"];
-        return;
-    }
-    self.submissionCategory = category;
-    self.submissionVideoID = manager.videoID;
-    self.submissionCID = manager.cid;
-    self.submissionVideoDuration = manager.estimatedVideoDuration;
-    self.submissionStartTime = currentTime;
-    self.submissionInProgress = YES;
-    self.suppressedNoticeUUID = nil;
-    [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                 segment:nil
-                   title:@"已记录起点"
-                  detail:[NSString stringWithFormat:@"%@ · 起点 %@", [self titleForCategory:category], [self stringFromTime:currentTime]]
-            primaryTitle:@"终点提交"
-          secondaryTitle:@"取消"];
-}
-
-- (void)confirmPOISubmissionWithCategory:(NSString *)category sourceView:(UIView *)sourceView {
-    NJSponsorBlockManager *manager = _manager;
-    NSTimeInterval currentTime = manager.currentPlaybackTime;
-    NSString *videoID = manager.videoID;
-    NSInteger cid = manager.cid;
-    NSTimeInterval videoDuration = manager.estimatedVideoDuration;
-    if (![self currentPlaybackTimeIsValid:currentTime]) {
-        [self showTransientMessage:@"无法提交" detail:@"无法获取当前播放时间"];
-        return;
-    }
-    if (videoID.length == 0 || cid <= 0 || videoDuration <= 0 || !isfinite(videoDuration)) {
-        [self showTransientMessage:@"无法提交" detail:@"当前视频信息不完整"];
-        return;
-    }
-
-    UIViewController *presenter = [self presentationViewController];
-    if (!presenter) {
-        [self showTransientMessage:@"无法提交" detail:@"无法打开确认框"];
-        return;
-    }
-
-    NSString *message = [NSString stringWithFormat:@"保存当前时间 %@ 为精彩片段草稿", [self stringFromTime:currentTime]];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"保存精彩片段草稿" message:message preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"保存草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) {
-            return;
-        }
-        NJSponsorBlockManager *currentManager = self->_manager;
-        if (![currentManager.videoID isEqualToString:videoID] || currentManager.cid != cid) {
-            [strongSelf showTransientMessage:@"无法提交" detail:@"当前视频已切换，请重新选择"];
-            return;
-        }
-        [strongSelf saveDraftSegmentValues:@[[strongSelf roundedTimeNumber:MIN(currentTime, videoDuration)]]
-                                  category:category
-                                actionType:@"poi"];
-    }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    alert.popoverPresentationController.sourceView = sourceView ?: self;
-    alert.popoverPresentationController.sourceRect = sourceView ? sourceView.bounds : self.bounds;
-    [presenter presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)finishSubmissionAtCurrentTime {
-    if (!self.submissionInProgress || self.submissionCategory.length == 0) {
-        return;
-    }
-
-    NJSponsorBlockManager *manager = _manager;
-    NSTimeInterval currentTime = manager.currentPlaybackTime;
-    if (![self currentPlaybackTimeIsValid:currentTime]) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                     segment:nil
-                       title:@"无法提交"
-                      detail:@"无法获取当前播放时间"
-                primaryTitle:@"重试"
-              secondaryTitle:@"取消"];
-        return;
-    }
-    if (![manager.videoID isEqualToString:self.submissionVideoID] || manager.cid != self.submissionCID) {
-        [self cancelSubmissionDraft];
-        [self showTransientMessage:@"已取消提交" detail:@"当前视频已切换，请重新记录片段"];
-        return;
-    }
-
-    NSArray<NSNumber *> *segment = [self roundedSegmentFromStart:self.submissionStartTime end:currentTime];
-    NSTimeInterval start = segment.firstObject.doubleValue;
-    NSTimeInterval end = segment.lastObject.doubleValue;
-    NSTimeInterval duration = self.submissionVideoDuration;
-    if (duration <= 0 || !isfinite(duration)) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                     segment:nil
-                       title:@"无法提交"
-                      detail:@"暂未获取视频时长，稍后再试"
-                primaryTitle:@"重试"
-              secondaryTitle:@"取消"];
-        return;
-    }
-    if (end > duration) {
-        end = duration;
-        segment = @[@(start), @(end)];
-    }
-
-    NSTimeInterval minDuration = MAX([NJSponsorBlockSettings minDuration], 0.5);
-    if (end - start < minDuration) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                     segment:nil
-                       title:@"片段太短"
-                      detail:[NSString stringWithFormat:@"至少需要 %@", [self compactStringFromTime:minDuration]]
-                primaryTitle:@"重试"
-              secondaryTitle:@"取消"];
-        return;
-    }
-
-    [self saveDraftSegmentValues:segment
-                        category:self.submissionCategory
-                      actionType:[self submissionActionTypeForCategory:self.submissionCategory]];
-}
-
-- (void)cancelSubmissionDraft {
-    self.submissionInProgress = NO;
-    self.submissionCategory = nil;
-    self.submissionVideoID = nil;
-    self.submissionCID = 0;
-    self.submissionVideoDuration = 0;
-    self.submissionStartTime = 0;
-    [self hideNotice];
-}
-
-- (void)saveDraftSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType {
-    NJSponsorBlockSegment *localSegment = [_manager addUnsubmittedSegmentWithCategory:category actionType:actionType segment:segment];
-    if (!localSegment) {
-        [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
-                     segment:nil
-                       title:@"保存失败"
-                      detail:@"无法保存本地未提交片段"
-                primaryTitle:(self.submissionInProgress ? @"重试" : nil)
-              secondaryTitle:(self.submissionInProgress ? @"取消" : nil)];
-        return;
-    }
-
-    self.submissionInProgress = NO;
-    self.submissionCategory = nil;
-    self.submissionVideoID = nil;
-    self.submissionCID = 0;
-    self.submissionVideoDuration = 0;
-    self.submissionStartTime = 0;
-    [self showTransientMessage:@"已保存草稿" detail:@"可在提交菜单中提交或管理"];
-    [self refreshContent];
-}
-
-- (BOOL)currentPlaybackTimeIsValid:(NSTimeInterval)time {
-    return time >= 0 && isfinite(time);
-}
-
-- (NSArray<NSNumber *> *)roundedSegmentFromStart:(NSTimeInterval)start end:(NSTimeInterval)end {
-    NSTimeInterval roundedStart = [self roundedTimeNumber:MIN(start, end)].doubleValue;
-    NSTimeInterval roundedEnd = [self roundedTimeNumber:MAX(start, end)].doubleValue;
-    return @[@(roundedStart), @(roundedEnd)];
-}
-
-- (NSNumber *)roundedTimeNumber:(NSTimeInterval)time {
-    return @(round((time + DBL_EPSILON) * 1000.0) / 1000.0);
-}
-
-- (NSString *)submissionActionTypeForCategory:(NSString *)category {
-    return [category isEqualToString:@"poi_highlight"] ? @"poi" : @"skip";
 }
 
 - (UIViewController *)presentationViewController {
@@ -1077,20 +631,20 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (void)copySegmentUUIDTapped:(UIButton *)button {
     NJSponsorBlockSegment *segment = [self segmentFromSender:button];
     if (segment.uuid.length == 0) {
-        [self showTransientMessage:@"复制失败" detail:@"片段 UUID 为空"];
+        [_manager showInfoToast:@"复制失败" detail:@"片段 UUID 为空"];
         return;
     }
     UIPasteboard.generalPasteboard.string = segment.uuid;
-    [self showTransientMessage:@"已复制 UUID" detail:segment.uuid];
+    [_manager showInfoToast:@"已复制 UUID" detail:segment.uuid];
 }
 
 - (void)voteForSegment:(NJSponsorBlockSegment *)segment type:(NSInteger)type {
     if (segment.isUnsubmitted) {
-        [self showTransientMessage:@"无法投票" detail:@"本地未提交片段不能投票"];
+        [_manager showInfoToast:@"无法投票" detail:@"本地未提交片段不能投票"];
         return;
     }
     if (segment.uuid.length == 0) {
-        [self showTransientMessage:@"无法投票" detail:@"片段 UUID 为空"];
+        [_manager showInfoToast:@"无法投票" detail:@"片段 UUID 为空"];
         return;
     }
 
@@ -1102,56 +656,12 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
                 return;
             }
             if (success) {
-                [strongSelf showTransientMessage:(type == 1 ? @"已点赞" : @"已点踩") detail:@"感谢反馈"];
+                [strongSelf->_manager showInfoToast:(type == 1 ? @"已点赞" : @"已点踩") detail:@"感谢反馈"];
             } else {
-                [strongSelf showTransientMessage:@"投票失败" detail:error.localizedDescription ?: @"请稍后重试"];
+                [strongSelf->_manager showInfoToast:@"投票失败" detail:error.localizedDescription ?: @"请稍后重试"];
             }
         });
     }];
-}
-
-- (void)noticePrimaryTapped:(UIButton *)button {
-    if (self.noticeMode == NJSponsorBlockPanelNoticeModeSubmissionDraft) {
-        [self finishSubmissionAtCurrentTime];
-        return;
-    }
-
-    NJSponsorBlockSegment *segment = self.noticeSegment;
-    if (!segment) {
-        return;
-    }
-    self.suppressedNoticeUUID = nil;
-    if (self.noticeMode == NJSponsorBlockPanelNoticeModeSkipped) {
-        [_manager clearSkippedSegment:segment];
-        [_manager seekTo:segment.startTime];
-        [self hideNotice];
-        return;
-    }
-    [_manager skipSegment:segment];
-}
-
-- (void)noticeSecondaryTapped:(UIButton *)button {
-    if (self.noticeMode == NJSponsorBlockPanelNoticeModeSubmissionDraft) {
-        [self cancelSubmissionDraft];
-        return;
-    }
-
-    NJSponsorBlockSegment *segment = self.noticeSegment;
-    if (self.noticeMode == NJSponsorBlockPanelNoticeModeAdvance && segment) {
-        [_manager markSegmentSkipped:segment];
-    } else {
-        [self suppressCurrentNoticeSegment];
-    }
-    [self hideNotice];
-}
-
-- (void)noticeCloseTapped:(UIButton *)button {
-    if (self.noticeMode == NJSponsorBlockPanelNoticeModeSubmissionDraft) {
-        [self cancelSubmissionDraft];
-        return;
-    }
-    [self suppressCurrentNoticeSegment];
-    [self hideNotice];
 }
 
 - (void)progressSegmentTapped:(UITapGestureRecognizer *)gesture {

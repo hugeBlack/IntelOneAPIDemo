@@ -51,6 +51,10 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockCategoryAction) {
 + (void)setShowSharedEntryButton:(BOOL)enabled;
 + (BOOL)showVideoLabels;
 + (void)setShowVideoLabels:(BOOL)enabled;
++ (BOOL)showAutoSkipToast;
++ (void)setShowAutoSkipToast:(BOOL)enabled;
++ (BOOL)showSkipUndoToast;
++ (void)setShowSkipUndoToast:(BOOL)enabled;
 
 + (NSArray<NJSponsorBlockCategoryOption *> *)categoryOptions;
 + (NSArray<NJSponsorBlockCategoryOption *> *)thumbnailBadgeLabelOptions;

@@ -24,6 +24,8 @@ static NSString * const NJSponsorBlockShowSegmentsInSeekbarWidgetKey = @"NJSpons
 static NSString * const NJSponsorBlockShowSegmentsInProgressWidgetKey = @"NJSponsorBlockShowSegmentsInProgressWidgetKey";
 static NSString * const NJSponsorBlockShowSharedEntryButtonKey = @"NJSponsorBlockShowSharedEntryButtonKey";
 static NSString * const NJSponsorBlockShowVideoLabelsKey = @"NJSponsorBlockShowVideoLabelsKey";
+static NSString * const NJSponsorBlockShowAutoSkipToastKey = @"NJSponsorBlockShowAutoSkipToastKey";
+static NSString * const NJSponsorBlockShowSkipUndoToastKey = @"NJSponsorBlockShowSkipUndoToastKey";
 static NSString * const NJSponsorBlockThumbnailBadgeColorsKey = @"NJSponsorBlockThumbnailBadgeColorsKey";
 
 static NSString * const NJSponsorBlockDefaultServerBaseURLString = @"https://bsbsb.top";
@@ -292,6 +294,26 @@ static NSString * const NJSponsorBlockTestingServerBaseURLString = @"http://127.
 
 + (void)setShowVideoLabels:(BOOL)enabled {
     [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowVideoLabelsKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (BOOL)showAutoSkipToast {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockShowAutoSkipToastKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setShowAutoSkipToast:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowAutoSkipToastKey];
+    [self postSettingsDidChangeNotification];
+}
+
++ (BOOL)showSkipUndoToast {
+    id value = [NJ_SETTING_CACHE objectForKey:NJSponsorBlockShowSkipUndoToastKey];
+    return [value respondsToSelector:@selector(boolValue)] ? [value boolValue] : YES;
+}
+
++ (void)setShowSkipUndoToast:(BOOL)enabled {
+    [NJ_SETTING_CACHE setObject:@(enabled) forKey:NJSponsorBlockShowSkipUndoToastKey];
     [self postSettingsDidChangeNotification];
 }
 

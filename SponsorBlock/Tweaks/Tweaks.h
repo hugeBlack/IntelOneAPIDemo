@@ -37,9 +37,17 @@ extern void* sponsorBlockManagerKey;
 -(void)seekTo:(NSTimeInterval)arg0 ;
 @end
 
+@interface BBPlayerToastWidgetService : NSObject
+-(void)presentCustomToast:(id)arg0 ;
+-(void)dismissToast:(id)arg0 ;
+-(void)showToastContainerWithText:(NSString*)arg0 ;
+@end
+
 @interface BBPlayerContext : NSObject
 @property (readonly, weak, nonatomic) BBPlayerPlayback *playback;
 @property (readonly, weak, nonatomic) BBPlayerFeatureWidgetService* featureWidgetService;
+@property (readonly, weak, nonatomic) BBPlayerToastWidgetService *toastWidgetService;
+
 @end
 
 
@@ -57,7 +65,31 @@ extern void* sponsorBlockManagerKey;
 - (instancetype)initWithContext:(id)context;
 @end
 
+@interface BBPlayerToastWidget : BBPlayerWidget
 
+@property (retain, nonatomic) UILabel *hintLabel; // ivar: _hintLabel
+@property (retain, nonatomic) UILabel *descLabel; // ivar: _descLabel
+@property (retain, nonatomic) UIButton *closeButton; // ivar: _closeButton
+@property (retain, nonatomic) UIButton *actionButton; // ivar: _actionButton
+@property (retain, nonatomic) NSNumber *key; // ivar: _key
+@property (readonly, nonatomic) NSUInteger style; // ivar: _style
+@property (readonly, nonatomic) NSUInteger sizeMode; // ivar: _sizeMode
+@property (nonatomic) NSInteger priority; // ivar: _priority
+@property (nonatomic) CGFloat duration; // ivar: _duration
+@property (readonly, nonatomic) BOOL dynamicHugging;
+
+
+-(id)initWithContext:(id)arg0 ;
+-(id)initWithContext:(id)arg0 style:(NSUInteger)arg1 ;
+-(id)view;
+-(void)sizeModeChangedTo:(NSUInteger)arg0 ;
+-(void)setupToast;
+-(NSInteger)compare:(id)arg0 ;
+-(void)setupDefaultToast;
+-(void)setupOperableToast;
+-(void)setupOperableDescToast;
+
+@end
 
 void initPlayerWidgetButtonHooks(void);
 void initViewReplyHooks(void);

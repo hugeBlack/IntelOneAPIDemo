@@ -52,13 +52,7 @@ void hook_setupSubWidgets(BBPlayerWidget* self, SEL sel) {
     [rightControlWidget addSubWidget:(BBPlayerWidget*)fakeWidget];
 }
 
-void registerOpenPanelButtonWidget(void);
-void registerSponsorBlockPanelWidget(void);
-
 void initPlayerWidgetButtonHooks(void) {
-    registerOpenPanelButtonWidget();
-    registerSponsorBlockPanelWidget();
-
     for (int i = 0; i < kTopWidgetClassCount; i++) {
         JRSwizzleInstanceMethod(objc_lookUpClass(kTopWidgetClassNames[i]),
                                 @selector(setupSubWidgets),

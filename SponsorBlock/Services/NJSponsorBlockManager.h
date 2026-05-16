@@ -28,6 +28,12 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotif
 @property (nonatomic, weak) BBPlayerContext* playerContext;
 @property NJSponsorBlockPanelView* panelView;
 
+/// YES while the user is recording an end-time submission draft (toast is visible).
+@property (nonatomic, assign, readonly) BOOL submissionDraftInProgress;
+
+/// YES while a network submission request is in flight.
+@property (nonatomic, assign, readonly) BOOL isSubmissionInFlight;
+
 - (instancetype)initWithContext:(BBPlayerContext*)playerContext;
 
 - (void)updateVideoID:(NSString *)videoID cid:(NSInteger)cid;
@@ -61,6 +67,20 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotif
 
 - (void)skipSegment:(NJSponsorBlockSegment*)segment;
 - (void)seekTo:(NSTimeInterval)dest;
+
+/// Begin recording an end-time submission draft for the given category.
+/// Shows a persistent toast with "终点提交" / "取消" buttons.
+- (void)beginSubmissionDraftWithCategory:(NSString *)category;
+
+/// Cancel an active submission draft and dismiss its toast.
+- (void)cancelSubmissionDraft;
+
+/// Submit all unsubmitted segments for the current video, showing progress toasts.
+- (void)submitCurrentVideoDraftsShowingToasts;
+
+/// Show a brief auto-dismissing info toast with no close button.
+- (void)showInfoToast:(NSString *)title detail:(NSString *)detail;
+
 - (void)reset;
 @end
 
