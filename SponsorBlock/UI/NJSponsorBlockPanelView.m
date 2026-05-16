@@ -36,7 +36,7 @@ static CGFloat const NJSponsorBlockPanelChromeHeight = 134.0;
 @property (nonatomic, strong) UIScrollView *segmentScrollView;
 @property (nonatomic, strong) UIStackView *segmentStackView;
 @property (nonatomic, strong) UIView *progressView;
-@property (nonatomic, strong) UIButton *closeButton;
+@property (nonatomic, strong) UIButton *refreshButton;
 @property (nonatomic, strong) UIButton *toggleButton;
 @property (nonatomic, strong) UIButton *submitButton;
 @property (nonatomic, strong) UILabel *statsLabel;
@@ -201,13 +201,12 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.footerStack.translatesAutoresizingMaskIntoConstraints = NO;
     [self addSubview:self.footerStack];
 
-    self.closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.closeButton setTitle:@"✕" forState:UIControlStateNormal];
-    [self.closeButton setTitleColor:[UIColor colorWithWhite:0.72 alpha:1] forState:UIControlStateNormal];
-    self.closeButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
-    self.closeButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.closeButton addTarget:self action:@selector(closePanelTapped:) forControlEvents:UIControlEventTouchUpInside];
-    [self addSubview:self.closeButton];
+    self.refreshButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [self.refreshButton setImage:[UIImage systemImageNamed:@"arrow.clockwise"] forState:UIControlStateNormal];
+    [self.refreshButton setTintColor:[UIColor colorWithWhite:0.72 alpha:1]];
+    self.refreshButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.refreshButton addTarget:self action:@selector(refreshButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:self.refreshButton];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.iconLabel.widthAnchor constraintEqualToConstant:34],
@@ -216,14 +215,14 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self.submitButton.widthAnchor constraintEqualToConstant:52],
         [self.submitButton.heightAnchor constraintEqualToConstant:30],
 
-        [self.closeButton.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
-        [self.closeButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-8],
-        [self.closeButton.widthAnchor constraintEqualToConstant:28],
-        [self.closeButton.heightAnchor constraintEqualToConstant:28],
+        [self.refreshButton.topAnchor constraintEqualToAnchor:self.topAnchor constant:16],
+        [self.refreshButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16],
+        [self.refreshButton.widthAnchor constraintEqualToConstant:20],
+        [self.refreshButton.heightAnchor constraintEqualToConstant:20],
 
         [self.headerStack.topAnchor constraintEqualToAnchor:self.topAnchor constant:12],
         [self.headerStack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
-        [self.headerStack.trailingAnchor constraintEqualToAnchor:self.closeButton.leadingAnchor constant:-4],
+        [self.headerStack.trailingAnchor constraintEqualToAnchor:self.refreshButton.leadingAnchor constant:-4],
 
         [self.segmentScrollView.topAnchor constraintEqualToAnchor:self.headerStack.bottomAnchor constant:10],
         [self.segmentScrollView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:12],
@@ -500,8 +499,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     return label;
 }
 
-- (void)closePanelTapped:(UIButton *)button {
-//    [NJSponsorBlockPanelView hidePanelAnimated];
+- (void)refreshButtonTapped:(UIButton *)button {
+    [_manager refresh];
 }
 
 - (void)toggleEnabled {

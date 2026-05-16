@@ -82,6 +82,7 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotif
 - (void)showInfoToast:(NSString *)title detail:(NSString *)detail;
 
 - (void)reset;
+- (void)refresh;
 @end
 
 NS_ASSUME_NONNULL_END

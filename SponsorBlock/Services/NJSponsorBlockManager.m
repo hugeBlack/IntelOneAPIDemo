@@ -140,7 +140,7 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     }
     self.playerContext = playerContext;
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(handleSettingsDidChange)
+                                             selector:@selector(refresh)
                                                  name:NJSponsorBlockSettingsDidChangeNotification
                                                object:nil];
     [self reset];
@@ -636,9 +636,8 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
                            userInfo:@{NSLocalizedDescriptionKey: message ?: @"SponsorBlock submission failed"}];
 }
 
-- (void)handleSettingsDidChange {
-    NSString *serverBaseURLString = [NJSponsorBlockSettings serverBaseURLString];
-    BOOL shouldReload = self.loadedServerBaseURLString.length == 0 || ![self.loadedServerBaseURLString isEqualToString:serverBaseURLString];
+- (void)refresh {
+    BOOL shouldReload = YES;
     if (shouldReload) {
         self.segments = @[];
         self.loadedServerBaseURLString = @"";
@@ -648,6 +647,7 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     }
     [self postStateChangedNotification];
     if (shouldReload) {
+        [self invalidateCachedSegmentsForVideoID:_videoID cid:_cid];
         [self loadSegmentsForCurrentVideoIfNeeded];
     }
 }
