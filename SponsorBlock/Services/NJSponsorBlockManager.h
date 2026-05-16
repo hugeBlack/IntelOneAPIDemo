@@ -61,6 +61,7 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotif
 
 - (void)skipSegment:(NJSponsorBlockSegment*)segment;
 - (void)seekTo:(NSTimeInterval)dest;
+- (void)reset;
 @end
 
 NS_ASSUME_NONNULL_END

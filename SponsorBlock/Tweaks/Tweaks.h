@@ -26,8 +26,14 @@ extern void* sponsorBlockManagerKey;
 -(void)pushWidget:(id)arg0;
 @end
 
-@interface BBPlayerPlayback : NSObject
+@class BBPlayerContext;
+@interface BBPlayerObject : NSObject
+@property (readonly, weak, nonatomic) BBPlayerContext *context;
+@end
+
+@interface BBPlayerPlayback : BBPlayerObject
 @property (nonatomic) NSTimeInterval currentTime;
+@property (retain, nonatomic) id currentItem;
 -(void)seekTo:(NSTimeInterval)arg0 ;
 @end
 
@@ -36,9 +42,7 @@ extern void* sponsorBlockManagerKey;
 @property (readonly, weak, nonatomic) BBPlayerFeatureWidgetService* featureWidgetService;
 @end
 
-@interface BBPlayerObject : NSObject
-@property (readonly, weak, nonatomic) BBPlayerContext *context;
-@end
+
 
 @interface BBPlayerWidget : BBPlayerObject
 @property UIView* view;
@@ -61,3 +65,4 @@ void initSettingsHooks(void);
 void initSeekbarHooks(void);
 void initThumbnailBadgeHooks(void);
 void initPlayerContextHooks(void);
+void initPlayerPlaybackHooks(void);

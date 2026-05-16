@@ -102,21 +102,12 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     if (!self) {
         return nil;
     }
-        self.playerContext = playerContext;
-        self.videoID = @"";
-        self.segments = @[];
-        self.loadedServerBaseURLString = @"";
-        self.skippedUUIDs = [NSMutableSet set];
-        self.actualSkippedUUIDs = [NSMutableSet set];
-        self.service = [[NJSponsorBlockService alloc] init];
-        self.cooldownUntil = [NSDate distantPast];
-        self.lastProbeLogTime = -100;
-        self.trackedCacheKeys = [NSMutableSet set];
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(handleSettingsDidChange)
-                                                     name:NJSponsorBlockSettingsDidChangeNotification
-                                                   object:nil];
-        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleVideoInfoRetrieved:) name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
+    self.playerContext = playerContext;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleSettingsDidChange)
+                                                 name:NJSponsorBlockSettingsDidChangeNotification
+                                               object:nil];
+    [self reset];
     
     __weak typeof(self) weakSelf = self;
     _playbackPollTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(__unused NSTimer *timer) {
@@ -702,6 +693,20 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [self.playbackPollTimer invalidate];
+}
+
+- (void)reset {
+    self.videoID = @"";
+    self.segments = @[];
+    self.loadedServerBaseURLString = @"";
+    self.skippedUUIDs = [NSMutableSet set];
+    self.actualSkippedUUIDs = [NSMutableSet set];
+    self.service = [[NJSponsorBlockService alloc] init];
+    self.cooldownUntil = [NSDate distantPast];
+    self.lastProbeLogTime = -100;
+    self.trackedCacheKeys = [NSMutableSet set];
+    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleVideoInfoRetrieved:) name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
+    [self postStateChangedNotification];
 }
 
 @end

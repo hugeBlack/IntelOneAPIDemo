@@ -24,11 +24,11 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(reload)
                                                      name:NJSponsorBlockStateDidChangeNotification
-                                                   object:nil];
+                                                   object:manager];
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(onPlaybackTimeChanged)
                                                      name:NJSponsorBlockPlaybackTimeDidChangeNotification
-                                                   object:nil];
+                                                   object:manager];
     }
     return self;
 }

@@ -17,4 +17,5 @@ __attribute__((constructor)) void TweakInit(void) {
     initViewReplyHooks();
     initThumbnailBadgeHooks();
     initPlayerContextHooks();
+    initPlayerPlaybackHooks();
 }
