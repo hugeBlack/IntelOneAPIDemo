@@ -17,6 +17,7 @@ NSNotificationName const NJSponsorBlockStateDidChangeNotification = @"NJSponsorB
 NSNotificationName const NJSponsorBlockPlaybackTimeDidChangeNotification = @"NJSponsorBlockPlaybackTimeDidChangeNotification";
 NSNotificationName const NJSponsorBlockManualSkipRequestNotification = @"NJSponsorBlockManualSkipRequestNotification";
 NSNotificationName const NJSponsorBlockSeekRequestNotification = @"NJSponsorBlockSeekRequestNotification";
+NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotification = @"NJSponsorBlockVideoInfoRetrievedNotification";
 
 static NSString * const NJSponsorBlockCachePrefix = @"NJSponsorBlockSegments";
 static NSTimeInterval const NJSponsorBlockCacheTTL = 24 * 60 * 60;
@@ -68,11 +69,11 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 @property (nonatomic, copy) NSString *loadedServerBaseURLString;
 @property (nonatomic, strong) NSMutableSet<NSString *> *trackedCacheKeys;
 
+@property NSTimer* playbackPollTimer;
+@property NSTimeInterval NJSponsorBlockLastPlaybackPosition;
+
 - (void)updateNativeVideoDuration:(NSTimeInterval)duration;
-- (NSTimeInterval)videoDurationInObject:(id)object;
-- (NSTimeInterval)durationInDictionary:(NSDictionary *)dictionary;
-- (NSTimeInterval)durationFromKey:(NSString *)key value:(id)value;
-- (NSTimeInterval)durationFromCandidateAccessorsOfObject:(id)object;
+
 - (void)invalidateCachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid;
 - (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message;
@@ -96,18 +97,12 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 
 @implementation NJSponsorBlockManager
 
-+ (instancetype)sharedInstance {
-    static NJSponsorBlockManager *instance = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        instance = [[NJSponsorBlockManager alloc] init];
-    });
-    return instance;
-}
-
-- (instancetype)init {
+- (instancetype)initWithContext:(BBPlayerContext*)playerContext {
     self = [super init];
-    if (self) {
+    if (!self) {
+        return nil;
+    }
+        self.playerContext = playerContext;
         self.videoID = @"";
         self.segments = @[];
         self.loadedServerBaseURLString = @"";
@@ -121,7 +116,14 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
                                                  selector:@selector(handleSettingsDidChange)
                                                      name:NJSponsorBlockSettingsDidChangeNotification
                                                    object:nil];
-    }
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleVideoInfoRetrieved:) name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
+    
+    __weak typeof(self) weakSelf = self;
+    _playbackPollTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(__unused NSTimer *timer) {
+        NSTimeInterval time = weakSelf.playerContext.playback.currentTime;
+        [weakSelf handlePlaybackTime:time];
+    }];
+    
     return self;
 }
 
@@ -144,83 +146,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     [self postStateChangedNotification];
     NSLog(@"[NJSponsorBlock] update video %@:%ld", videoID, (long)cid);
     [self loadSegmentsForCurrentVideoIfNeeded];
-}
-
-- (void)inspectResponseData:(NSData *)data response:(NSURLResponse *)response {
-    if (![NJSponsorBlockSettings enabled] || data.length == 0) {
-        return;
-    }
-    
-    if (![self shouldInspectResponse:response data:data]) {
-        return;
-    }
-    
-    NSError *error = nil;
-    id json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
-    if (error || !json) {
-        return;
-    }
-    
-    NSDictionary *identity = [self videoIdentityInObject:json];
-    NSString *videoID = identity[@"videoID"];
-    NSNumber *cid = identity[@"cid"];
-    if (videoID.length == 0 || cid.integerValue <= 0) {
-        return;
-    }
-    NSLog(@"[NJSponsorBlock] found video identity %@:%ld from %@", videoID, (long)cid.integerValue, response.URL.absoluteString);
-    [self updateVideoID:videoID cid:cid.integerValue];
-    [self updateNativeVideoDuration:[self videoDurationInObject:json]];
-}
-
-- (void)inspectModelObject:(id)object source:(NSString *)source {
-    if (![NJSponsorBlockSettings enabled] || !object) {
-        return;
-    }
-    
-    NSMutableSet<NSValue *> *visited = [NSMutableSet set];
-    NSString *__block videoID = nil;
-    NSNumber *__block cid = nil;
-    NSTimeInterval __block duration = 0;
-    [self collectVideoIdentityFromObject:object
-                                   depth:0
-                                 visited:visited
-                                 videoID:&videoID
-                                     cid:&cid
-                                duration:&duration];
-    if (videoID.length == 0 || cid.integerValue <= 0) {
-        NSLog(@"[NJSponsorBlock] model identity not found from %@ %@", source ?: @"unknown", NSStringFromClass([object class]));
-        return;
-    }
-    
-    NSLog(@"[NJSponsorBlock] found video identity %@:%ld from model %@ %@",
-          videoID,
-          (long)cid.integerValue,
-          source ?: @"unknown",
-          NSStringFromClass([object class]));
-    [self updateVideoID:videoID cid:cid.integerValue];
-    [self updateNativeVideoDuration:duration];
-}
-
-- (BOOL)shouldInspectResponse:(NSURLResponse *)response data:(NSData *)data {
-    NSString *url = response.URL.absoluteString.lowercaseString ?: @"";
-    NSString *mimeType = response.MIMEType.lowercaseString ?: @"";
-    if ([url containsString:@"view"] ||
-        [url containsString:@"detail"] ||
-        [url containsString:@"player"] ||
-        [url containsString:@"playurl"] ||
-        [url containsString:@"archive"]) {
-        return YES;
-    }
-    
-    if (![mimeType containsString:@"json"] || data.length > 2 * 1024 * 1024) {
-        return NO;
-    }
-    
-    NSData *bvidData = [@"bvid" dataUsingEncoding:NSUTF8StringEncoding];
-    NSData *cidData = [@"cid" dataUsingEncoding:NSUTF8StringEncoding];
-    NSRange range = NSMakeRange(0, data.length);
-    return [data rangeOfData:bvidData options:0 range:range].location != NSNotFound &&
-           [data rangeOfData:cidData options:0 range:range].location != NSNotFound;
 }
 
 - (NSArray<NJSponsorBlockSegment *> *)allSegments {
@@ -699,6 +624,16 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     }
 }
 
+- (void)handleVideoInfoRetrieved:(NSNotification*)notification {
+    NSDictionary* info = [notification userInfo];
+    NSString *videoID = info[@"videoID"];
+    NSNumber *cid = info[@"cid"];
+    NSNumber *duration = info[@"duration"];
+    [self updateVideoID:videoID cid:cid.integerValue];
+    [self updateNativeVideoDuration:duration.longLongValue];
+    [NSNotificationCenter.defaultCenter removeObserver:self name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
+}
+
 - (void)postStateChangedNotification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockStateDidChangeNotification object:self];
@@ -711,272 +646,62 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     });
 }
 
-- (NSDictionary *)videoIdentityInObject:(id)object {
-    if ([object isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *dictionary = (NSDictionary *)object;
-        NSString *videoID = [self videoIDInDictionary:dictionary];
-        NSNumber *cid = [self cidInDictionary:dictionary];
-        if (videoID.length > 0 && cid.integerValue > 0) {
-            return @{@"videoID": videoID, @"cid": cid};
-        }
-        
-        for (id value in dictionary.allValues) {
-            NSDictionary *identity = [self videoIdentityInObject:value];
-            if (identity) {
-                return identity;
-            }
-        }
-        return nil;
-    }
-    
-    if ([object isKindOfClass:[NSArray class]]) {
-        for (id value in (NSArray *)object) {
-            NSDictionary *identity = [self videoIdentityInObject:value];
-            if (identity) {
-                return identity;
-            }
-        }
-    }
-    return nil;
-}
+- (void)handlePlaybackTime:(NSTimeInterval) position {
+    NJSponsorBlockManager *manager = self;
 
-- (NSString *)videoIDInDictionary:(NSDictionary *)dictionary {
-    for (NSString *key in dictionary) {
-        if (![key isKindOfClass:[NSString class]]) {
-            continue;
-        }
-        NSString *lowerKey = key.lowercaseString;
-        if (![lowerKey isEqualToString:@"bvid"] &&
-            ![lowerKey isEqualToString:@"bvidstr"] &&
-            ![lowerKey isEqualToString:@"bvid_str"] &&
-            ![lowerKey isEqualToString:@"bv_id"]) {
-            continue;
-        }
-        id value = dictionary[key];
-        if ([value isKindOfClass:[NSString class]] && [value hasPrefix:@"BV"]) {
-            return value;
-        }
-    }
-    return nil;
-}
+    BOOL movedBySeek = _NJSponsorBlockLastPlaybackPosition >= 0 && fabs(position - _NJSponsorBlockLastPlaybackPosition) > 2.0;
+    _NJSponsorBlockLastPlaybackPosition = position;
 
-- (NSNumber *)cidInDictionary:(NSDictionary *)dictionary {
-    for (NSString *key in dictionary) {
-        if (![key isKindOfClass:[NSString class]] || ![key.lowercaseString isEqualToString:@"cid"]) {
-            continue;
-        }
-        id value = dictionary[key];
-        if ([value respondsToSelector:@selector(integerValue)] && [value integerValue] > 0) {
-            return @([value integerValue]);
-        }
-    }
-    return nil;
-}
+    [manager handlePlaybackTimeForProbe:position];
 
-- (NSTimeInterval)videoDurationInObject:(id)object {
-    if ([object isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *dictionary = (NSDictionary *)object;
-        NSTimeInterval duration = [self durationInDictionary:dictionary];
-        if (duration > 0) {
-            return duration;
-        }
-        for (id value in dictionary.allValues) {
-            duration = [self videoDurationInObject:value];
-            if (duration > 0) {
-                return duration;
-            }
-        }
-        return 0;
-    }
-
-    if ([object isKindOfClass:[NSArray class]]) {
-        for (id value in (NSArray *)object) {
-            NSTimeInterval duration = [self videoDurationInObject:value];
-            if (duration > 0) {
-                return duration;
-            }
-        }
-    }
-    return 0;
-}
-
-- (NSTimeInterval)durationInDictionary:(NSDictionary *)dictionary {
-    for (NSString *key in dictionary) {
-        if (![key isKindOfClass:[NSString class]]) {
-            continue;
-        }
-        NSTimeInterval duration = [self durationFromKey:key value:dictionary[key]];
-        if (duration > 0) {
-            return duration;
-        }
-    }
-    return 0;
-}
-
-- (NSTimeInterval)durationFromKey:(NSString *)key value:(id)value {
-    if (![value respondsToSelector:@selector(doubleValue)]) {
-        return 0;
-    }
-    NSString *lowerKey = key.lowercaseString;
-    NSTimeInterval rawValue = [value doubleValue];
-    if (rawValue <= 0 || !isfinite(rawValue)) {
-        return 0;
-    }
-    if ([lowerKey isEqualToString:@"timelength"] ||
-        [lowerKey isEqualToString:@"time_length"] ||
-        [lowerKey isEqualToString:@"duration_ms"]) {
-        return rawValue / 1000.0;
-    }
-    if ([lowerKey isEqualToString:@"duration"] ||
-        [lowerKey isEqualToString:@"video_duration"] ||
-        [lowerKey isEqualToString:@"videoduration"]) {
-        return rawValue > 86400 ? rawValue / 1000.0 : rawValue;
-    }
-    return 0;
-}
-
-- (NSTimeInterval)durationFromCandidateAccessorsOfObject:(id)object {
-    NSArray<NSString *> *selectors = @[@"duration", @"timelength", @"timeLength", @"videoDuration"];
-    for (NSString *selectorName in selectors) {
-        id value = [self safeValueForSelectorName:selectorName object:object];
-        NSTimeInterval duration = [self durationFromKey:selectorName value:value];
-        if (duration > 0) {
-            return duration;
-        }
-    }
-    return 0;
-}
-
-- (void)collectVideoIdentityFromObject:(id)object
-                                 depth:(NSInteger)depth
-                               visited:(NSMutableSet<NSValue *> *)visited
-                               videoID:(NSString **)videoID
-                                   cid:(NSNumber **)cid
-                              duration:(NSTimeInterval *)duration {
-    if (!object || depth > 5 || ((*videoID).length > 0 && (*cid).integerValue > 0 && *duration > 0)) {
+    if ([manager isInCooldown]) {
         return;
     }
-    
-    if ([object isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *dictionary = (NSDictionary *)object;
-        NSString *foundVideoID = [self videoIDInDictionary:dictionary];
-        NSNumber *foundCID = [self cidInDictionary:dictionary];
-        if ((*videoID).length == 0 && foundVideoID.length > 0) {
-            *videoID = foundVideoID;
-        }
-        if ((*cid).integerValue <= 0 && foundCID.integerValue > 0) {
-            *cid = foundCID;
-        }
-        if (*duration <= 0) {
-            *duration = [self durationInDictionary:dictionary];
-        }
-        for (id value in dictionary.allValues) {
-            [self collectVideoIdentityFromObject:value depth:depth + 1 visited:visited videoID:videoID cid:cid duration:duration];
+
+    NSArray<NJSponsorBlockSegment *> *segments = [manager autoSkipSegmentsAtPlaybackTime:position];
+    NJSponsorBlockSegment *segment = segments.lastObject;
+    if (!segment) {
+        return;
+    }
+
+    if (movedBySeek && ![manager skipOnSeekToSegment]) {
+        NSLog(@"[NJSponsorBlock] ignore seek into segment %@ %.2f-%.2f", segment.uuid, segment.startTime, segment.endTime);
+        for (NJSponsorBlockSegment *skippedSegment in segments) {
+            [manager markSegmentSkipped:skippedSegment];
         }
         return;
     }
-    
-    if ([object isKindOfClass:[NSArray class]] || [object isKindOfClass:[NSSet class]]) {
-        for (id value in object) {
-            [self collectVideoIdentityFromObject:value depth:depth + 1 visited:visited videoID:videoID cid:cid duration:duration];
-        }
-        return;
-    }
-    
-    if ([object isKindOfClass:[NSString class]] ||
-        [object isKindOfClass:[NSNumber class]] ||
-        [object isKindOfClass:[NSData class]] ||
-        [object isKindOfClass:[NSDate class]]) {
-        return;
-    }
-    
-    NSValue *pointer = [NSValue valueWithNonretainedObject:object];
-    if ([visited containsObject:pointer]) {
-        return;
-    }
-    [visited addObject:pointer];
-    
-    NSString *className = NSStringFromClass([object class]);
-    if (![className hasPrefix:@"BAPI"] && ![className hasPrefix:@"BBPlayer"] && ![className hasPrefix:@"BFCPlayer"]) {
-        return;
-    }
-    
-    [self collectVideoIdentityFromCandidateAccessorsOfObject:object videoID:videoID cid:cid];
-    if (*duration <= 0) {
-        *duration = [self durationFromCandidateAccessorsOfObject:object];
+
+    NSTimeInterval targetTime = segment.endTime;
+    if (segment.videoDuration > 0 && targetTime > segment.videoDuration - 2.0) {
+        targetTime -= 2.0;
     }
 
-    unsigned int propertyCount = 0;
-    objc_property_t *properties = class_copyPropertyList([object class], &propertyCount);
-    for (unsigned int i = 0; i < propertyCount; i++) {
-        const char *name = property_getName(properties[i]);
-        if (!name) {
-            continue;
-        }
-        id value = [self safeValueForKey:[NSString stringWithUTF8String:name] object:object];
-        [self collectVideoIdentityFromObject:value depth:depth + 1 visited:visited videoID:videoID cid:cid duration:duration];
-    }
-    free(properties);
-    
-    unsigned int ivarCount = 0;
-    Ivar *ivars = class_copyIvarList([object class], &ivarCount);
-    for (unsigned int i = 0; i < ivarCount; i++) {
-        Ivar ivar = ivars[i];
-        const char *type = ivar_getTypeEncoding(ivar);
-        const char *name = ivar_getName(ivar);
-        if (!type || type[0] != '@' || !name) {
-            continue;
-        }
-        id value = object_getIvar(object, ivar);
-        [self collectVideoIdentityFromObject:value depth:depth + 1 visited:visited videoID:videoID cid:cid duration:duration];
-    }
-    free(ivars);
+    [self skipSegment:segment];
 }
 
-- (void)collectVideoIdentityFromCandidateAccessorsOfObject:(id)object
-                                                   videoID:(NSString **)videoID
-                                                       cid:(NSNumber **)cid {
-    NSArray<NSString *> *videoSelectors = @[@"bvid", @"bvidStr", @"bvidString", @"bvID", @"bvId"];
-    for (NSString *selectorName in videoSelectors) {
-        id value = [self safeValueForSelectorName:selectorName object:object];
-        if ((*videoID).length == 0 && [value isKindOfClass:[NSString class]] && [value hasPrefix:@"BV"]) {
-            *videoID = value;
-        }
+- (void)skipSegment:(NJSponsorBlockSegment*)segment {
+    if (!segment) {
+        return;
     }
+
+    NSTimeInterval targetTime = [segment.actionType isEqualToString:@"poi"] ? segment.startTime : segment.endTime;
+    [_playerContext.playback seekTo:segment.endTime];
+    [self markSegmentSkipped:segment];
+    [self reportSegmentSkipped:segment];
+    [self recordLastSkippedSegment:segment];
+    [self enterCooldown];
+    NSLog(@"[NJSponsorBlock] manually skipped %@ %.2f-%.2f target=%.2f", segment.uuid, segment.startTime, segment.endTime, targetTime);
     
-    id cidValue = [self safeValueForSelectorName:@"cid" object:object];
-    if ((*cid).integerValue <= 0 && [cidValue respondsToSelector:@selector(integerValue)] && [cidValue integerValue] > 0) {
-        *cid = @([cidValue integerValue]);
-    }
 }
 
-- (id)safeValueForSelectorName:(NSString *)selectorName object:(id)object {
-    SEL selector = NSSelectorFromString(selectorName);
-    if (![object respondsToSelector:selector]) {
-        return nil;
-    }
-    
-    NSMethodSignature *signature = [object methodSignatureForSelector:selector];
-    if (!signature || signature.numberOfArguments != 2) {
-        return nil;
-    }
-    
-    return [self safeValueForKey:selectorName object:object];
+- (void)seekTo:(NSTimeInterval)dest {
+    [_playerContext.playback seekTo:dest];
 }
 
-- (id)safeValueForKey:(NSString *)key object:(id)object {
-    @try {
-        return [object valueForKey:key];
-    } @catch (__unused NSException *exception) {
-        if ([key hasPrefix:@"_"]) {
-            return nil;
-        }
-        @try {
-            return [object valueForKey:[@"_" stringByAppendingString:key]];
-        } @catch (__unused NSException *innerException) {
-            return nil;
-        }
-    }
+- (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    [self.playbackPollTimer invalidate];
 }
 
 @end

@@ -13,25 +13,6 @@ static Ivar contextIvar;
 static Ivar viewIvar;
 static Class BBPlayerCastBtnWidgetClass;
 
-static id OpenPanelButtonWidget_initWithContext(id self, SEL _cmd, id context) {
-    struct objc_super superInfo = {
-        .receiver = self,
-        .super_class = BBPlayerCastBtnWidgetClass
-    };
-
-    id (*objc_msgSendSuper_id)(struct objc_super *, SEL, id) =
-        (id (*)(struct objc_super *, SEL, id))objc_msgSendSuper;
-
-    self = objc_msgSendSuper_id(&superInfo, @selector(initWithContext:), context);
-    if (!self) {
-        return nil;
-    }
-
-    object_setIvar(self, contextIvar, context);
-
-    return self;
-}
-
 static UIButton* createEntryButton(void) {
     UIButton* button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.frame = CGRectMake(0, 0, 38, 38);
@@ -58,14 +39,6 @@ static UIView *OpenPanelButtonWidget_view(id self, SEL _cmd) {
     return button;
 }
 
-@interface BBPlayerFeatureWidgetService : NSObject
--(void)pushWidget:(id)arg0;
-@end
-
-@interface BBPlayerContext : NSObject
-- (id)featureWidgetService;
-@end
-
 static void OpenPanelButtonWidget_togglePanelFromEntryButton(id self, SEL _cmd, id sender) {
     BBPlayerContext* context = object_getIvar(self, contextIvar);
     [[context featureWidgetService] pushWidget:[[PrivClass(SponsorBlockPanelWidget) alloc] initWithContext:context]];
@@ -75,14 +48,6 @@ static void OpenPanelButtonWidget_togglePanelFromEntryButton(id self, SEL _cmd, 
 void registerOpenPanelButtonWidget(void) {
     BBPlayerCastBtnWidgetClass = PrivClass(BBPlayerCastBtnWidget);
     Class OpenPanelButtonWidgetClass = objc_allocateClassPair(BBPlayerCastBtnWidgetClass, "OpenPanelButtonWidget", 0);
-    class_addIvar(OpenPanelButtonWidgetClass, "_context", sizeof(id), log2(sizeof(id)), "@");
-    
-    class_addMethod(
-                    OpenPanelButtonWidgetClass,
-                    @selector(initWithContext:),
-                    (IMP)OpenPanelButtonWidget_initWithContext,
-                    "@@:@"
-                    );
     
     class_addMethod(
                     OpenPanelButtonWidgetClass,

@@ -14,7 +14,7 @@
 BOOL JRSwizzleInstanceMethod(Class targetClass, SEL selector, IMP newIMP, IMP *origIMPPtr);
 void swizzle(Class clazz, SEL originalAction, SEL swizzledAction);
 
-
+extern void* sponsorBlockManagerKey;
 
 @interface BBPlayerControlContainerWidgetView : UIView
 @end
@@ -22,11 +22,29 @@ void swizzle(Class clazz, SEL originalAction, SEL swizzledAction);
 @interface BBPlayerSeekbarContainerView : UIView
 @end
 
-@interface BBPlayerWidget : NSObject
+@interface BBPlayerFeatureWidgetService : NSObject
+-(void)pushWidget:(id)arg0;
+@end
+
+@interface BBPlayerPlayback : NSObject
+@property (nonatomic) NSTimeInterval currentTime;
+-(void)seekTo:(NSTimeInterval)arg0 ;
+@end
+
+@interface BBPlayerContext : NSObject
+@property (readonly, weak, nonatomic) BBPlayerPlayback *playback;
+@property (readonly, weak, nonatomic) BBPlayerFeatureWidgetService* featureWidgetService;
+@end
+
+@interface BBPlayerObject : NSObject
+@property (readonly, weak, nonatomic) BBPlayerContext *context;
+@end
+
+@interface BBPlayerWidget : BBPlayerObject
 @property UIView* view;
 @property (readonly, weak, nonatomic) BBPlayerWidget *superWidget;
 @property (readonly, copy, nonatomic) NSArray *subWidgets;
-@property id context;
+
 - (void)addSubWidget:(BBPlayerWidget *)subWidget;
 - (void)willLayoutSubWidgets;
 @end
@@ -35,9 +53,11 @@ void swizzle(Class clazz, SEL originalAction, SEL swizzledAction);
 - (instancetype)initWithContext:(id)context;
 @end
 
+
+
 void initPlayerWidgetButtonHooks(void);
 void initViewReplyHooks(void);
 void initSettingsHooks(void);
 void initSeekbarHooks(void);
 void initThumbnailBadgeHooks(void);
-void NJSponsorBlockPlaybackHookInit(void);
+void initPlayerContextHooks(void);

@@ -6,12 +6,18 @@
 //
 #include "../Tweaks.h"
 #include "../../UI/NJSponsorBlockPanelView.h"
+#include "../../Services/NJSponsorBlockManager.h"
 @import ObjectiveC;
 @import UIKit;
 
 static UIView *OpenPanelButtonWidget_view(id self, SEL _cmd) {
-    NJSponsorBlockPanelView* panel = [NJSponsorBlockPanelView sharedPanel];
-    [panel refreshContent];
+    NJSponsorBlockManager* manager = objc_getAssociatedObject([self context], sponsorBlockManagerKey);
+    NJSponsorBlockPanelView * panel = [manager panelView];
+    if(!panel) {
+        panel = [[NJSponsorBlockPanelView alloc] initWithManager:manager];
+        manager.panelView = panel;
+    }
+
     return panel;
 }
 

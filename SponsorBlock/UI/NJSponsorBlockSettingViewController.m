@@ -341,7 +341,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
     __weak typeof(self) weakSelf = self;
     [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [confirm addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
-        [[NJSponsorBlockManager sharedInstance] clearAllCachedSegments];
         [weakSelf.tableView reloadSections:[NSIndexSet indexSetWithIndex:NJSponsorBlockSettingSectionCache] withRowAnimation:UITableViewRowAnimationNone];
     }]];
     [self presentViewController:confirm animated:YES completion:nil];
@@ -496,9 +495,6 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockSettingSection) {
         [NJSponsorBlockSettings setEnabled:aSwitch.on];
     } else if (aSwitch.tag == 101) {
         [NJSponsorBlockSettings setCacheEnabled:aSwitch.on];
-        if (!aSwitch.on) {
-            [[NJSponsorBlockManager sharedInstance] clearAllCachedSegments];
-        }
     } else if (aSwitch.tag == 102) {
         [NJSponsorBlockSettings setSkipOnSeekToSegment:aSwitch.on];
     } else if (aSwitch.tag == 103) {

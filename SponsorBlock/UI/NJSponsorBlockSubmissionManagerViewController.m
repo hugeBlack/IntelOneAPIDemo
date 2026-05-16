@@ -4,7 +4,6 @@
 //
 
 #import "NJSponsorBlockSubmissionManagerViewController.h"
-#import "../Services/NJSponsorBlockManager.h"
 #import "../Models/NJSponsorBlockSegment.h"
 #import "../Settings/NJSponsorBlockSettings.h"
 #import "../Services/NJSponsorBlockUnsubmittedSegmentStore.h"
@@ -16,6 +15,8 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
 
 @property (nonatomic, strong) NSArray<NSString *> *videoKeys;
 @property (nonatomic, assign) BOOL submissionInFlight;
+
+@property NJSponsorBlockManager* manager;
 
 - (void)reloadDrafts;
 - (void)closeTapped;
@@ -41,7 +42,8 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
 
 @implementation NJSponsorBlockSubmissionManagerViewController
 
-- (instancetype)init {
+- (instancetype)initWithManager:(NJSponsorBlockManager*)manager {
+    _manager = manager;
     return [super initWithStyle:UITableViewStyleGrouped];
 }
 
@@ -240,7 +242,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
     }
     NSString *videoID = [self videoIDFromKey:key];
     NSInteger cid = [self cidFromKey:key];
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     if (![manager.videoID isEqualToString:videoID] || manager.cid != cid) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"请先打开原视频"
                                                                        message:@"只能提交当前播放器正在播放的视频片段。"
@@ -282,7 +284,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
     [alert addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSString *videoID = [self videoIDFromKey:key];
         NSInteger cid = [self cidFromKey:key];
-        NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+        NJSponsorBlockManager *manager = _manager;
         if ([manager.videoID isEqualToString:videoID] && manager.cid == cid) {
             [manager clearUnsubmittedSegmentsForCurrentVideo];
         } else {
@@ -305,7 +307,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
-        [[NJSponsorBlockManager sharedInstance] clearAllUnsubmittedSegments];
+        [self.manager clearAllUnsubmittedSegments];
         [self reloadDrafts];
         [self.tableView reloadData];
     }]];
@@ -417,7 +419,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
 }
 
 - (void)postDraftsChangedNotification {
-    [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockStateDidChangeNotification object:[NJSponsorBlockManager sharedInstance]];
+    [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockStateDidChangeNotification object:_manager];
 }
 
 @end

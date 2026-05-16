@@ -6,7 +6,6 @@
 //
 
 #include "NJSponsorBlockTimelineView.h"
-#include "../Services/NJSponsorBlockManager.h"
 #include "../Settings/NJCommonDefine.h"
 #include "../Settings/NJSponsorBlockSettings.h"
 
@@ -15,9 +14,10 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
 
 @implementation NJSponsorBlockTimelineView
 
-- (instancetype)initWithFrame:(CGRect)frame {
+- (instancetype)initWithFrame:(CGRect)frame manager:(NJSponsorBlockManager*)manager {
     self = [super initWithFrame:frame];
     if (self) {
+        _manager = manager;
         _segmentMarkViews = [NSMutableArray array];
         self.userInteractionEnabled = NO;
         self.clipsToBounds = YES;
@@ -38,7 +38,7 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
 }
 
 - (void)onPlaybackTimeChanged {
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     [self updatePlayhead:manager.currentPlaybackTime];
 }
 
@@ -46,7 +46,7 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
     [self.subviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
     [_segmentMarkViews removeAllObjects];
     _playheadView = nil;
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     self.segments = [manager displaySegments];
     self.duration = manager.estimatedVideoDuration;
     self.currentPlaybackTime = manager.currentPlaybackTime;
@@ -120,7 +120,7 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
     _playheadView.frame = CGRectMake(playheadX - 1.0, 0, 2.0, height);
 }
 
-+ (void)installNativeTimelineInView:(UIView *)view {
++ (void)installNativeTimelineInView:(UIView *)view manager:(NJSponsorBlockManager*)manager {
     if (!view || !NJ_MASTER_SWITCH_VALUE) {
         return;
     }
@@ -130,7 +130,7 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
 
     NJSponsorBlockTimelineView *timeline = objc_getAssociatedObject(view, NJSponsorBlockNativeTimelineKey);
     if (!timeline) {
-        timeline = [[NJSponsorBlockTimelineView alloc] initWithFrame:CGRectZero];
+        timeline = [[NJSponsorBlockTimelineView alloc] initWithFrame:CGRectZero manager:manager];
         timeline.backgroundColor = UIColor.clearColor;
         objc_setAssociatedObject(view, NJSponsorBlockNativeTimelineKey, timeline, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [NJSponsorBlockNativeTimelineViews addObject:timeline];

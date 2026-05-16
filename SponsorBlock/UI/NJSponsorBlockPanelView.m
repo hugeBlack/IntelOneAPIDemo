@@ -5,7 +5,6 @@
 
 #import "NJSponsorBlockPanelView.h"
 #import "../Settings/NJCommonDefine.h"
-#import "../Services/NJSponsorBlockManager.h"
 #import "../Models/NJSponsorBlockSegment.h"
 #import "../Services/NJSponsorBlockService.h"
 #import "../Settings/NJSponsorBlockSettings.h"
@@ -73,6 +72,8 @@ typedef NS_ENUM(NSInteger, NJSponsorBlockPanelNoticeMode) {
 @property (nonatomic, copy) NSArray<NJSponsorBlockSegment *> *displayedSegments;
 @property (nonatomic, copy) NSArray<UIView *> *segmentRowViews;
 
+@property (nonatomic, weak) NJSponsorBlockManager* manager;
+
 - (UIButton *)noticeButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action;
 - (UIButton *)actionButtonWithTitle:(NSString *)title color:(UIColor *)color action:(SEL)action segment:(NJSponsorBlockSegment *)segment;
 - (void)updateHeaderWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments;
@@ -120,76 +121,30 @@ static UIViewController *NJSponsorBlockSharedOverlayController;
 static void *NJSponsorBlockManualSkipSegmentKey = &NJSponsorBlockManualSkipSegmentKey;
 static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
-+ (instancetype)sharedPanel {
-    static NJSponsorBlockPanelView *panel = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        panel = [[NJSponsorBlockPanelView alloc] initWithFrame:CGRectMake(16, 88, NJSponsorBlockPanelWidth, NJSponsorBlockPanelMinHeight)];
-    });
-    return panel;
-}
-
-+ (void)removePanel {
-    [[self sharedPanel] removeFromSuperview];
-}
-
-+ (void)refresh {
-    [[self sharedPanel] refreshContent];
-}
-
-+ (void)showPanelAnimated:(NJSponsorBlockPanelView *)panel {
-    panel.alpha = 0.0;
-    panel.transform = CGAffineTransformMakeScale(0.96, 0.96);
-    [UIView animateWithDuration:0.18
-                          delay:0
-                        options:UIViewAnimationOptionCurveEaseOut
-                     animations:^{
-        panel.alpha = 1.0;
-        panel.transform = CGAffineTransformIdentity;
-    } completion:nil];
-}
-
-+ (void)hidePanelAnimated {
-    NJSponsorBlockPanelView *panel = [self sharedPanel];
-    if (!panel.superview) {
-        return;
-    }
-
-    [UIView animateWithDuration:0.16
-                          delay:0
-                        options:UIViewAnimationOptionCurveEaseIn
-                     animations:^{
-        panel.alpha = 0.0;
-        panel.transform = CGAffineTransformMakeScale(0.96, 0.96);
-    } completion:^(__unused BOOL finished) {
-        [panel removeFromSuperview];
-        panel.alpha = 1.0;
-        panel.transform = CGAffineTransformIdentity;
-    }];
-}
-
 + (UIColor *)colorForCategory:(NSString *)category {
     return [NJSponsorBlockSettings colorForCategory:category];
 }
 
-+ (void)hidePanelOnly {
-    [self hidePanelAnimated];
+- (instancetype)initWithManager:(NJSponsorBlockManager*)manager {
+    CGRect frame = CGRectMake(16, 88, NJSponsorBlockPanelWidth, NJSponsorBlockPanelMinHeight);
+    return [self initWithFrame:frame manager:manager];
 }
 
-- (instancetype)initWithFrame:(CGRect)frame {
+- (instancetype)initWithFrame:(CGRect)frame manager:(NJSponsorBlockManager*)manager {
     self = [super initWithFrame:frame];
     if (self) {
+        self.manager = manager;
         self.service = [[NJSponsorBlockService alloc] init];
         [self setupViews];
         [self refreshContent];
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(refreshContent)
                                                      name:NJSponsorBlockStateDidChangeNotification
-                                                   object:nil];
+                                                   object:manager];
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(onPlaybackTimeChanged)
                                                      name:NJSponsorBlockPlaybackTimeDidChangeNotification
-                                                   object:nil];
+                                                   object:manager];
     }
     return self;
 }
@@ -406,18 +361,16 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)refreshContentOnMainThread {
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     NSArray<NJSponsorBlockSegment *> *segments = [manager displaySegments] ?: @[];
 
-    self.hidden = !NJ_MASTER_SWITCH_VALUE;
-    if(self.superview != nil) {
-        [self updateHeaderWithManager:manager segments:segments];
-        [self updateEnabledButton:[NJSponsorBlockSettings enabled]];
-        [self updateFooterWithManager:manager segments:segments];
-        [self updateNoticeWithManager:manager segments:segments];
-        [self rebuildSegmentRowsWithSegments:segments manager:manager];
-        [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
-    }
+    [self updateHeaderWithManager:manager segments:segments];
+    [self updateEnabledButton:[NJSponsorBlockSettings enabled]];
+    [self updateFooterWithManager:manager segments:segments];
+    [self updateNoticeWithManager:manager segments:segments];
+    [self rebuildSegmentRowsWithSegments:segments manager:manager];
+    [self renderPanelProgressWithSegments:segments duration:manager.estimatedVideoDuration];
+    
 }
 
 - (void)updateHeaderWithManager:(NJSponsorBlockManager *)manager segments:(NSArray<NJSponsorBlockSegment *> *)segments {
@@ -608,7 +561,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)updateForPlaybackTimeOnMainThread {
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     NSTimeInterval time = manager.currentPlaybackTime;
     NSTimeInterval duration = manager.estimatedVideoDuration;
 
@@ -660,7 +613,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     CGFloat width = CGRectGetWidth(self.bounds) > 0 ? CGRectGetWidth(self.bounds) - 24.0 : NJSponsorBlockPanelWidth - 24.0;
     for (NJSponsorBlockSegment *segment in segments) {
         CGFloat startX = MAX(0, MIN(width, width * segment.startTime / duration));
@@ -687,7 +640,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (UIView *)rowForSegment:(NJSponsorBlockSegment *)segment currentTime:(NSTimeInterval)currentTime {
     UIView *row = [[UIView alloc] init];
     BOOL active = [segment containsPlaybackTime:currentTime];
-    BOOL skipped = [[NJSponsorBlockManager sharedInstance] hasActuallySkippedSegment:segment];
+    BOOL skipped = [_manager hasActuallySkippedSegment:segment];
     if (active) {
         row.backgroundColor = [UIColor colorWithRed:0.00 green:0.55 blue:0.58 alpha:0.92];
     } else if (skipped) {
@@ -769,7 +722,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)closePanelTapped:(UIButton *)button {
-    [NJSponsorBlockPanelView hidePanelAnimated];
+//    [NJSponsorBlockPanelView hidePanelAnimated];
 }
 
 - (void)toggleEnabled {
@@ -801,7 +754,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    NSUInteger draftCount = [NJSponsorBlockManager sharedInstance].unsubmittedSegmentsForCurrentVideo.count;
+    NSUInteger draftCount = _manager.unsubmittedSegmentsForCurrentVideo.count;
     NSString *message = draftCount > 0 ? [NSString stringWithFormat:@"当前视频有 %lu 个未提交片段", (unsigned long)draftCount] : @"可保存新草稿或管理已有草稿";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"片段提交" message:message preferredStyle:UIAlertControllerStyleActionSheet];
     __weak typeof(self) weakSelf = self;
@@ -831,7 +784,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (BOOL)validateCurrentVideoForDraftCreation {
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     if (manager.videoID.length == 0 || manager.cid <= 0) {
         [self showTransientMessage:@"无法提交" detail:@"尚未识别当前视频"];
         return NO;
@@ -885,7 +838,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         [self showTransientMessage:@"无法打开" detail:@"无法打开未提交片段管理"];
         return;
     }
-    NJSponsorBlockSubmissionManagerViewController *controller = [[NJSponsorBlockSubmissionManagerViewController alloc] init];
+    NJSponsorBlockSubmissionManagerViewController *controller = [[NJSponsorBlockSubmissionManagerViewController alloc] initWithManager:_manager];
     UINavigationController *navigationController = [[UINavigationController alloc] initWithRootViewController:controller];
     navigationController.modalPresentationStyle = UIModalPresentationPageSheet;
     [presenter presentViewController:navigationController animated:YES completion:nil];
@@ -898,7 +851,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     self.submissionRequestInFlight = YES;
     [self refreshContent];
     __weak typeof(self) weakSelf = self;
-    [[NJSponsorBlockManager sharedInstance] submitUnsubmittedSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
+    [_manager submitUnsubmittedSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) {
@@ -913,7 +866,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)beginSubmissionWithCategory:(NSString *)category {
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     NSTimeInterval currentTime = manager.currentPlaybackTime;
     if (![self currentPlaybackTimeIsValid:currentTime]) {
         [self showTransientMessage:@"无法提交" detail:@"无法获取当前播放时间"];
@@ -935,7 +888,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)confirmPOISubmissionWithCategory:(NSString *)category sourceView:(UIView *)sourceView {
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     NSTimeInterval currentTime = manager.currentPlaybackTime;
     NSString *videoID = manager.videoID;
     NSInteger cid = manager.cid;
@@ -963,7 +916,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         if (!strongSelf) {
             return;
         }
-        NJSponsorBlockManager *currentManager = [NJSponsorBlockManager sharedInstance];
+        NJSponsorBlockManager *currentManager = self->_manager;
         if (![currentManager.videoID isEqualToString:videoID] || currentManager.cid != cid) {
             [strongSelf showTransientMessage:@"无法提交" detail:@"当前视频已切换，请重新选择"];
             return;
@@ -983,7 +936,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
         return;
     }
 
-    NJSponsorBlockManager *manager = [NJSponsorBlockManager sharedInstance];
+    NJSponsorBlockManager *manager = _manager;
     NSTimeInterval currentTime = manager.currentPlaybackTime;
     if (![self currentPlaybackTimeIsValid:currentTime]) {
         [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
@@ -1045,7 +998,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 }
 
 - (void)saveDraftSegmentValues:(NSArray<NSNumber *> *)segment category:(NSString *)category actionType:(NSString *)actionType {
-    NJSponsorBlockSegment *localSegment = [[NJSponsorBlockManager sharedInstance] addUnsubmittedSegmentWithCategory:category actionType:actionType segment:segment];
+    NJSponsorBlockSegment *localSegment = [_manager addUnsubmittedSegmentWithCategory:category actionType:actionType segment:segment];
     if (!localSegment) {
         [self showNoticeMode:NJSponsorBlockPanelNoticeModeSubmissionDraft
                      segment:nil
@@ -1098,7 +1051,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     if (!segment) {
         return;
     }
-    [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockManualSkipRequestNotification object:segment];
+    [_manager skipSegment:segment];
 }
 
 - (void)seekToSegmentStartTapped:(UIButton *)button {
@@ -1106,7 +1059,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     if (!segment) {
         return;
     }
-    [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockSeekRequestNotification object:@(segment.startTime)];
+    [_manager seekTo:segment.startTime];
 }
 
 - (void)skipSegmentTapped:(UIButton *)button {
@@ -1169,12 +1122,12 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     }
     self.suppressedNoticeUUID = nil;
     if (self.noticeMode == NJSponsorBlockPanelNoticeModeSkipped) {
-        [[NJSponsorBlockManager sharedInstance] clearSkippedSegment:segment];
-        [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockSeekRequestNotification object:@(segment.startTime)];
+        [_manager clearSkippedSegment:segment];
+        [_manager seekTo:segment.startTime];
         [self hideNotice];
         return;
     }
-    [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockManualSkipRequestNotification object:segment];
+    [_manager skipSegment:segment];
 }
 
 - (void)noticeSecondaryTapped:(UIButton *)button {
@@ -1185,7 +1138,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
     NJSponsorBlockSegment *segment = self.noticeSegment;
     if (self.noticeMode == NJSponsorBlockPanelNoticeModeAdvance && segment) {
-        [[NJSponsorBlockManager sharedInstance] markSegmentSkipped:segment];
+        [_manager markSegmentSkipped:segment];
     } else {
         [self suppressCurrentNoticeSegment];
     }
@@ -1206,7 +1159,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     if (!segment) {
         return;
     }
-    [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockSeekRequestNotification object:@(segment.startTime)];
+    [_manager seekTo:segment.startTime];
 }
 
 - (NSTimeInterval)durationForSegment:(NJSponsorBlockSegment *)segment {

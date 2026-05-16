@@ -5,15 +5,17 @@
 
 #import <Foundation/Foundation.h>
 #import "NJSponsorBlockService.h"
+#import "../Tweaks/Tweaks.h"
 
 @class NJSponsorBlockSegment;
+@class NJSponsorBlockPanelView;
 
 NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockStateDidChangeNotification;
 FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockPlaybackTimeDidChangeNotification;
-FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockManualSkipRequestNotification;
-FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification;
+
+FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotification;
 
 @interface NJSponsorBlockManager : NSObject
 
@@ -23,11 +25,13 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification
 @property (nonatomic, assign, readonly) NSTimeInterval currentPlaybackTime;
 @property (nonatomic, assign, readonly) NSTimeInterval estimatedVideoDuration;
 
-+ (instancetype)sharedInstance;
+@property (nonatomic, weak) BBPlayerContext* playerContext;
+@property NJSponsorBlockPanelView* panelView;
+
+- (instancetype)initWithContext:(BBPlayerContext*)playerContext;
 
 - (void)updateVideoID:(NSString *)videoID cid:(NSInteger)cid;
-- (void)inspectResponseData:(NSData *)data response:(NSURLResponse *)response;
-- (void)inspectModelObject:(id)object source:(NSString *)source;
+
 - (NSArray<NJSponsorBlockSegment *> *)allSegments;
 - (NSArray<NJSponsorBlockSegment *> *)displaySegments;
 - (nullable NJSponsorBlockSegment *)activeSegmentAtPlaybackTime:(NSTimeInterval)time;
@@ -55,6 +59,8 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockSeekRequestNotification
 - (void)enterCooldown;
 - (void)clearAllCachedSegments;
 
+- (void)skipSegment:(NJSponsorBlockSegment*)segment;
+- (void)seekTo:(NSTimeInterval)dest;
 @end
 
 NS_ASSUME_NONNULL_END
