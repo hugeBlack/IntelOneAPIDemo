@@ -78,12 +78,8 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
 - (void)layoutSubviews {
     [super layoutSubviews];
 
-    CGFloat width = CGRectGetWidth(self.superview.bounds);
-    CGFloat height = CGRectGetHeight(self.superview.bounds);
-    
-    CGFloat timelineHeight = MIN(4.0, MAX(2.0, height));
-    CGFloat y = MAX(0, (height - timelineHeight) * 0.5);
-    self.frame = CGRectMake(0, y, width, timelineHeight);
+    CGFloat width = CGRectGetWidth(self.bounds);
+    CGFloat height = CGRectGetHeight(self.bounds);
     
     NSTimeInterval duration = self.duration;
     NSArray<NJSponsorBlockSegment *> *segments = self.segments;
@@ -139,6 +135,12 @@ static NSHashTable<NJSponsorBlockTimelineView *> *NJSponsorBlockNativeTimelineVi
     if (timeline.superview != view) {
         [timeline removeFromSuperview];
         [view addSubview:timeline];
+        [NSLayoutConstraint activateConstraints:@[
+            [timeline.leftAnchor constraintEqualToAnchor:[view leftAnchor]],
+            [timeline.rightAnchor constraintEqualToAnchor:[view rightAnchor]],
+            [timeline.heightAnchor constraintEqualToAnchor:[view heightAnchor]]
+        ]];
+        timeline.translatesAutoresizingMaskIntoConstraints = NO;
         NSLog(@"[NJSponsorBlock] native timeline installed in %@ frame=%@", view, NSStringFromCGRect(view.frame));
         [view bringSubviewToFront:timeline];
         [timeline reload];

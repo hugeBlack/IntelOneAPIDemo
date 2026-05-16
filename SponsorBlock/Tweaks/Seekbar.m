@@ -9,16 +9,6 @@
 #include "../UI/NJSponsorBlockTimelineView.h"
 #include "../Settings/NJSponsorBlockSettings.h"
 
-// hooks start
-void (*orig_BBPlayerSeekbarContainerView_layoutSubviews)(id self, SEL sel) = nil;
-void hook_BBPlayerSeekbarContainerView_layoutSubviews(id self, SEL sel) {
-    if ([NJSponsorBlockSettings showSegmentsInSeekbarWidget]) {
-        NJSponsorBlockManager* manager = objc_getAssociatedObject([self context], sponsorBlockManagerKey);
-        [NJSponsorBlockTimelineView installNativeTimelineInView:(UIView *)self manager:manager];
-    }
-    orig_BBPlayerSeekbarContainerView_layoutSubviews(self, sel);
-}
-
 static const char* kSeekbarWidgetClassNames[] = {
     "BBPlayerSeekbarWidgetV2",
     "BBHD2MPSeekbarWidget",
