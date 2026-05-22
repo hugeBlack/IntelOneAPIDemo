@@ -56,11 +56,9 @@ static CGFloat const NJSponsorBlockPanelChromeHeight = 134.0;
 - (void)voteForSegment:(NJSponsorBlockSegment *)segment type:(NSInteger)type;
 - (void)submitSegmentTapped:(UIButton *)button;
 - (void)presentSubmissionMenuFromView:(UIView *)sourceView;
-- (BOOL)validateCurrentVideoForDraftCreation;
 - (void)presentSubmissionCategoryPickerFromView:(UIView *)sourceView;
 - (void)presentSubmissionManager;
 - (void)submitCurrentVideoDraftsFromPanel;
-- (void)beginSubmissionWithCategory:(NSString *)category;
 - (UIViewController *)presentationViewController;
 - (NSTimeInterval)durationForSegment:(NJSponsorBlockSegment *)segment;
 - (CGFloat)segmentRowsContentHeight;
@@ -282,7 +280,7 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
     [self.toggleButton setTitle:(enabled ? @"启用" : @"关闭") forState:UIControlStateNormal];
     self.toggleButton.backgroundColor = enabled ? [UIColor colorWithRed:0 green:0.70 blue:0.05 alpha:1] : [UIColor colorWithWhite:0.30 alpha:1];
     [self.toggleButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    self.submitButton.enabled = enabled && !_manager.isSubmissionInFlight;
+    self.submitButton.enabled = enabled && !_manager.submissionController.submissionInFlight;
     self.submitButton.alpha = self.submitButton.enabled ? 1.0 : 0.45;
 }
 
@@ -510,15 +508,15 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
 - (void)submitSegmentTapped:(UIButton *)button {
     if (![NJSponsorBlockSettings enabled]) {
-        [_manager showInfoToast:@"无法提交" detail:@"请先启用 SponsorBlock"];
+        [_manager.submissionController showInfoToast:@"无法提交" detail:@"请先启用 SponsorBlock"];
         return;
     }
-    if (_manager.isSubmissionInFlight) {
-        [_manager showInfoToast:@"正在提交" detail:@"请等待当前请求完成"];
+    if (_manager.submissionController.submissionInFlight) {
+        [_manager.submissionController showInfoToast:@"正在提交" detail:@"请等待当前请求完成"];
         return;
     }
-    if (_manager.submissionDraftInProgress) {
-        return; // 提交草稿流程由 Manager 的 Toast 管理
+    if (_manager.submissionController.draftInProgress) {
+        return; // 提交草稿流程由 SubmissionController 的 Toast 管理
     }
     [self presentSubmissionMenuFromView:button];
 }
@@ -526,11 +524,11 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (void)presentSubmissionMenuFromView:(UIView *)sourceView {
     UIViewController *presenter = [self presentationViewController];
     if (!presenter) {
-        [_manager showInfoToast:@"无法提交" detail:@"无法打开提交菜单"];
+        [_manager.submissionController showInfoToast:@"无法提交" detail:@"无法打开提交菜单"];
         return;
     }
 
-    NSUInteger draftCount = _manager.unsubmittedSegmentsForCurrentVideo.count;
+    NSUInteger draftCount = [_manager.submissionController segmentsForCurrentVideo].count;
     NSString *message = draftCount > 0 ? [NSString stringWithFormat:@"当前视频有 %lu 个未提交片段", (unsigned long)draftCount] : @"可保存新草稿或管理已有草稿";
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"片段提交" message:message preferredStyle:UIAlertControllerStyleActionSheet];
     __weak typeof(self) weakSelf = self;
@@ -539,6 +537,14 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [strongSelf presentSubmissionCategoryPickerFromView:sourceView];
+        });
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"新增“赞助/恰饭”片段草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [strongSelf->_manager.submissionController beginDraftWithCategory:@"sponsor"];
+            [strongSelf->_manager.playerContext.featureWidgetService popWidget];
         });
     }]];
     UIAlertAction *submitAction = [UIAlertAction actionWithTitle:@"提交当前视频草稿" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
@@ -571,8 +577,8 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
             if (!strongSelf) {
                 return;
             }
-            [strongSelf->_manager beginSubmissionDraftWithCategory:option.category];
-            
+            [strongSelf->_manager.submissionController beginDraftWithCategory:option.category];
+            [strongSelf->_manager.playerContext.featureWidgetService popWidget];
         }]];
     }
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -593,6 +599,10 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (UIViewController *)presentationViewController {
     // https://stackoverflow.com/a/12418527
     return [[[[UIApplication sharedApplication] delegate] window] rootViewController];
+}
+
+- (void)submitCurrentVideoDraftsFromPanel {
+    [_manager.submissionController submitCurrentVideoSegmentsShowingToasts];
 }
 
 - (NJSponsorBlockSegment *)segmentFromSender:(id)sender {
@@ -630,20 +640,20 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
 - (void)copySegmentUUIDTapped:(UIButton *)button {
     NJSponsorBlockSegment *segment = [self segmentFromSender:button];
     if (segment.uuid.length == 0) {
-        [_manager showInfoToast:@"复制失败" detail:@"片段 UUID 为空"];
+        [_manager.submissionController showInfoToast:@"复制失败" detail:@"片段 UUID 为空"];
         return;
     }
     UIPasteboard.generalPasteboard.string = segment.uuid;
-    [_manager showInfoToast:@"已复制 UUID" detail:segment.uuid];
+    [_manager.submissionController showInfoToast:@"已复制 UUID" detail:segment.uuid];
 }
 
 - (void)voteForSegment:(NJSponsorBlockSegment *)segment type:(NSInteger)type {
     if (segment.isUnsubmitted) {
-        [_manager showInfoToast:@"无法投票" detail:@"本地未提交片段不能投票"];
+        [_manager.submissionController showInfoToast:@"无法投票" detail:@"本地未提交片段不能投票"];
         return;
     }
     if (segment.uuid.length == 0) {
-        [_manager showInfoToast:@"无法投票" detail:@"片段 UUID 为空"];
+        [_manager.submissionController showInfoToast:@"无法投票" detail:@"片段 UUID 为空"];
         return;
     }
 
@@ -655,9 +665,9 @@ static void *NJSponsorBlockPanelSegmentKey = &NJSponsorBlockPanelSegmentKey;
                 return;
             }
             if (success) {
-                [strongSelf->_manager showInfoToast:(type == 1 ? @"已点赞" : @"已点踩") detail:@"感谢反馈"];
+                [strongSelf->_manager.submissionController showInfoToast:(type == 1 ? @"已点赞" : @"已点踩") detail:@"感谢反馈"];
             } else {
-                [strongSelf->_manager showInfoToast:@"投票失败" detail:error.localizedDescription ?: @"请稍后重试"];
+                [strongSelf->_manager.submissionController showInfoToast:@"投票失败" detail:error.localizedDescription ?: @"请稍后重试"];
             }
         });
     }];

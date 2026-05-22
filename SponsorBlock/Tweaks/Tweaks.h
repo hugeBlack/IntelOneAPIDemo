@@ -24,6 +24,7 @@ extern void* sponsorBlockManagerKey;
 
 @interface BBPlayerFeatureWidgetService : NSObject
 -(void)pushWidget:(id)arg0;
+-(void)popWidget;
 @end
 
 @class BBPlayerContext;

@@ -13,6 +13,7 @@
 #import "../Tweaks/RuntimeClasses/SponsorBlockHintToast.h"
 #import <math.h>
 #import <objc/runtime.h>
+#import "NJSponsorBlockSubmissionController.h"
 
 NSNotificationName const NJSponsorBlockStateDidChangeNotification = @"NJSponsorBlockStateDidChangeNotification";
 NSNotificationName const NJSponsorBlockPlaybackTimeDidChangeNotification = @"NJSponsorBlockPlaybackTimeDidChangeNotification";
@@ -54,7 +55,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 
 @end
 
-@interface NJSponsorBlockManager ()
+@interface NJSponsorBlockManager () <NJSponsorBlockSubmissionDelegate>
 
 @property (nonatomic, copy) NSString *videoID;
 @property (nonatomic, assign) NSInteger cid;
@@ -73,25 +74,15 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 @property NSTimer* playbackPollTimer;
 @property NSTimeInterval NJSponsorBlockLastPlaybackPosition;
 
-// Submission draft state (for 终点提交 toast)
-@property (nonatomic, assign) BOOL submissionDraftInProgress;
-@property (nonatomic, copy) NSString *submissionDraftCategory;
-@property (nonatomic, copy) NSString *submissionDraftVideoID;
-@property (nonatomic, assign) NSInteger submissionDraftCID;
-@property (nonatomic, assign) NSTimeInterval submissionDraftVideoDuration;
-@property (nonatomic, assign) NSTimeInterval submissionDraftStartTime;
+@property (nonatomic, strong) NJSponsorBlockSubmissionController *submissionController;
 
 // Advance-notice dedup: UUID of the segment for which we already showed the toast
 @property (nonatomic, copy) NSString *advanceNoticeShownForSegmentUUID;
-
-// Submission in-flight state
-@property (nonatomic, assign, readwrite) BOOL isSubmissionInFlight;
 
 - (void)updateNativeVideoDuration:(NSTimeInterval)duration;
 
 - (void)invalidateCachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid;
 - (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
-- (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message;
 - (void)clearSkipStateForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
 - (BOOL)hasSkippedSegment:(NJSponsorBlockSegment *)segment;
 - (void)postStateChangedNotification;
@@ -99,39 +90,10 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 - (void)checkAndShowAdvanceNoticeAtPlaybackTime:(NSTimeInterval)time;
 - (void)showAdvanceNoticeToastForSegment:(NJSponsorBlockSegment *)segment remaining:(NSTimeInterval)remaining;
 - (void)showSkippedNoticeToastForSegment:(NJSponsorBlockSegment *)segment;
-- (void)showSubmissionDraftToast;
-- (void)finishSubmissionDraft;
-- (void)submitStoredSegment:(NJSponsorBlockSegment *)segment
-                    videoID:(NSString *)videoID
-                        cid:(NSInteger)cid
-                   duration:(NSTimeInterval)duration
-                 completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
-- (void)submitUnsubmittedSegments:(NSArray<NJSponsorBlockSegment *> *)segments
-                          videoID:(NSString *)videoID
-                              cid:(NSInteger)cid
-                         duration:(NSTimeInterval)duration
-                            index:(NSUInteger)index
-                       completion:(nullable NJSponsorBlockSubmitCompletion)completion;
 
 @end
 
 @implementation NJSponsorBlockManager
-
-// ── Time formatting helpers (mirrors PanelView helpers) ──────────────────
-
-static NSString *NJSBFormatTime(NSTimeInterval time) {
-    if (time <= 0 || !isfinite(time)) return @"0:00.000";
-    NSInteger mins = (NSInteger)(time / 60.0);
-    double secs = time - mins * 60.0;
-    return [NSString stringWithFormat:@"%ld:%06.3f", (long)mins, secs];
-}
-
-static NSString *NJSBFormatCompact(NSTimeInterval time) {
-    if (time <= 0 || !isfinite(time)) return @"0s";
-    NSInteger secs = (NSInteger)round(time);
-    if (secs < 60) return [NSString stringWithFormat:@"%lds", (long)secs];
-    return [NSString stringWithFormat:@"%ld:%02ld", (long)(secs / 60), (long)(secs % 60)];
-}
 
 - (instancetype)initWithContext:(BBPlayerContext*)playerContext {
     self = [super init];
@@ -181,7 +143,7 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
         return @[];
     }
 
-    NSArray<NJSponsorBlockSegment *> *localSegments = [self unsubmittedSegmentsForCurrentVideo];
+    NSArray<NJSponsorBlockSegment *> *localSegments = [self.submissionController segmentsForCurrentVideo];
     if (self.segments.count == 0) {
         return localSegments;
     }
@@ -240,18 +202,6 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     return [targetSegments copy];
 }
 
-- (NJSponsorBlockSegment *)manualSkipSegmentAtPlaybackTime:(NSTimeInterval)time {
-    for (NJSponsorBlockSegment *segment in [self displaySegments]) {
-        if ([self hasSkippedSegment:segment] || ![NJSponsorBlockSettings shouldManualSkipSegment:segment]) {
-            continue;
-        }
-        if ([segment containsPlaybackTime:time]) {
-            return segment;
-        }
-    }
-    return nil;
-}
-
 - (NJSponsorBlockSegment *)upcomingAutoSkipSegmentAtPlaybackTime:(NSTimeInterval)time withinSeconds:(NSTimeInterval)seconds {
     if (seconds <= 0) {
         return nil;
@@ -284,10 +234,6 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
 
 - (NSTimeInterval)playbackTimeWithoutSkippedSegments:(NSTimeInterval)time {
     return MAX(0, time - [self skippedDurationBeforePlaybackTime:time]);
-}
-
-- (BOOL)skipOnSeekToSegment {
-    return [NJSponsorBlockSettings skipOnSeekToSegment];
 }
 
 - (void)handlePlaybackTimeForProbe:(NSTimeInterval)time {
@@ -339,135 +285,6 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     if (segment.actionType.length == 0 || [segment.actionType isEqualToString:@"skip"]) {
         [self.service reportViewedSegmentWithUUID:segment.uuid];
     }
-}
-
-- (void)submitUnsubmittedSegmentsForCurrentVideoWithCompletion:(NJSponsorBlockSubmitCompletion)completion {
-    if (self.videoID.length == 0 || self.cid <= 0) {
-        if (completion) {
-            completion(NO, [self submissionErrorWithCode:-1 message:@"尚未识别当前视频"]);
-        }
-        return;
-    }
-
-    NSArray<NJSponsorBlockSegment *> *segments = [self unsubmittedSegmentsForCurrentVideo];
-    if (segments.count == 0) {
-        if (completion) {
-            completion(NO, [self submissionErrorWithCode:-4 message:@"当前视频没有未提交片段"]);
-        }
-        return;
-    }
-
-    NSTimeInterval duration = self.estimatedVideoDuration;
-    if (duration <= 0 || isnan(duration) || isinf(duration)) {
-        if (completion) {
-            completion(NO, [self submissionErrorWithCode:-2 message:@"暂未获取视频时长，稍后再试"]);
-        }
-        return;
-    }
-
-    [self submitUnsubmittedSegments:segments
-                             videoID:self.videoID
-                                 cid:self.cid
-                            duration:duration
-                               index:0
-                          completion:completion];
-}
-
-- (void)submitUnsubmittedSegments:(NSArray<NJSponsorBlockSegment *> *)segments
-                          videoID:(NSString *)videoID
-                              cid:(NSInteger)cid
-                         duration:(NSTimeInterval)duration
-                            index:(NSUInteger)index
-                       completion:(NJSponsorBlockSubmitCompletion)completion {
-    if (index >= segments.count) {
-        [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] removeSegmentsForVideoID:videoID cid:cid];
-        [self clearSkipStateForSegments:segments];
-        [self invalidateCachedSegmentsForVideoID:videoID cid:cid];
-        self.segments = @[];
-        [self postStateChangedNotification];
-        [self loadSegmentsForCurrentVideoIfNeeded];
-        if (completion) {
-            completion(YES, nil);
-        }
-        return;
-    }
-
-    NJSponsorBlockSegment *segment = segments[index];
-    __weak typeof(self) weakSelf = self;
-    [self submitStoredSegment:segment videoID:videoID cid:cid duration:duration completion:^(BOOL success, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) {
-                if (completion) {
-                    NSError *staleError = [NSError errorWithDomain:@"NJSponsorBlockManager"
-                                                              code:-5
-                                                          userInfo:@{NSLocalizedDescriptionKey: @"提交状态已失效"}];
-                    completion(NO, staleError);
-                }
-                return;
-            }
-            if (!success) {
-                if (completion) {
-                    completion(NO, error);
-                }
-                return;
-            }
-            [strongSelf submitUnsubmittedSegments:segments
-                                          videoID:videoID
-                                              cid:cid
-                                         duration:duration
-                                            index:index + 1
-                                       completion:completion];
-        });
-    }];
-}
-
-- (void)submitStoredSegment:(NJSponsorBlockSegment *)segment
-                    videoID:(NSString *)videoID
-                        cid:(NSInteger)cid
-                   duration:(NSTimeInterval)duration
-                 completion:(void (^)(BOOL success, NSError *error))completion {
-    NSArray<NSNumber *> *values = [segment.actionType isEqualToString:@"poi"] ? @[@(segment.startTime)] : @[@(segment.startTime), @(segment.endTime)];
-    [self.service submitSegmentWithVideoID:videoID
-                                       cid:cid
-                                  category:segment.category
-                                actionType:segment.actionType
-                                   segment:values
-                             videoDuration:duration
-                                completion:completion];
-}
-
-- (NJSponsorBlockSegment *)addUnsubmittedSegmentWithCategory:(NSString *)category
-                                                  actionType:(NSString *)actionType
-                                                     segment:(NSArray<NSNumber *> *)segment {
-    NJSponsorBlockSegment *localSegment = [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] addSegmentForVideoID:self.videoID
-                                                                                                               cid:self.cid
-                                                                                                          category:category
-                                                                                                        actionType:actionType
-                                                                                                           segment:segment
-                                                                                                     videoDuration:self.estimatedVideoDuration];
-    if (localSegment) {
-        [self postStateChangedNotification];
-    }
-    return localSegment;
-}
-
-- (NSArray<NJSponsorBlockSegment *> *)unsubmittedSegmentsForCurrentVideo {
-    return [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] segmentsForVideoID:self.videoID cid:self.cid];
-}
-
-- (void)clearUnsubmittedSegmentsForCurrentVideo {
-    NSArray<NJSponsorBlockSegment *> *segments = [self unsubmittedSegmentsForCurrentVideo];
-    [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] removeSegmentsForVideoID:self.videoID cid:self.cid];
-    [self clearSkipStateForSegments:segments];
-    [self postStateChangedNotification];
-}
-
-- (void)clearAllUnsubmittedSegments {
-    NSArray<NJSponsorBlockSegment *> *segments = [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] allSegments];
-    [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] clearAllSegments];
-    [self clearSkipStateForSegments:segments];
-    [self postStateChangedNotification];
 }
 
 - (BOOL)hasSkippedSegment:(NJSponsorBlockSegment *)segment {
@@ -630,12 +447,6 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     return size;
 }
 
-- (NSError *)submissionErrorWithCode:(NSInteger)code message:(NSString *)message {
-    return [NSError errorWithDomain:@"NJSponsorBlockManager"
-                               code:code
-                           userInfo:@{NSLocalizedDescriptionKey: message ?: @"SponsorBlock submission failed"}];
-}
-
 - (void)refresh {
     BOOL shouldReload = YES;
     if (shouldReload) {
@@ -697,7 +508,7 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
         return;
     }
 
-    if (movedBySeek && ![manager skipOnSeekToSegment]) {
+    if (movedBySeek && ![NJSponsorBlockSettings skipOnSeekToSegment]) {
         NSLog(@"[NJSponsorBlock] ignore seek into segment %@ %.2f-%.2f", segment.uuid, segment.startTime, segment.endTime);
         for (NJSponsorBlockSegment *skippedSegment in segments) {
             [manager markSegmentSkipped:skippedSegment];
@@ -817,165 +628,27 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     }
 }
 
-// ── Submission draft (终点提交) ────────────────────────────────────────────
+// ── NJSponsorBlockSubmissionDelegate ────────────────────────────────────
 
-- (void)beginSubmissionDraftWithCategory:(NSString *)category {
-    NSTimeInterval currentTime = self.currentPlaybackTime;
-    if (currentTime < 0 || !isfinite(currentTime)) {
-        [_playerContext.toastWidgetService showToastContainerWithText:@"无法提交, 无法获取当前播放时间"];
-        return;
-    }
-    if (self.videoID.length == 0 || self.cid <= 0) {
-        [_playerContext.toastWidgetService showToastContainerWithText:@"无法提交, 尚未识别当前视频"];
-        return;
-    }
-    if (self.estimatedVideoDuration <= 0 || !isfinite(self.estimatedVideoDuration)) {
-        [_playerContext.toastWidgetService showToastContainerWithText:@"无法提交, 暂未获取视频时长，稍后再试"];
-        return;
-    }
-
-    self.submissionDraftCategory = category;
-    self.submissionDraftVideoID  = self.videoID;
-    self.submissionDraftCID      = self.cid;
-    self.submissionDraftVideoDuration = self.estimatedVideoDuration;
-    self.submissionDraftStartTime = currentTime;
-    self.submissionDraftInProgress = YES;
-    
-    if([category isEqualToString:@"poi_highlight"]) {
-        [self finishSubmissionDraft];
-        return;
-    }
-
-    [self showSubmissionDraftToast];
-}
-
-- (void)showSubmissionDraftToast {
-    if (!_playerContext) return;
-
-    NSString *detail = [NSString stringWithFormat:@"%@ · 起点 %@",
-                        [NJSponsorBlockSettings titleForCategory:self.submissionDraftCategory],
-                        NJSBFormatTime(self.submissionDraftStartTime)];
-
-    __weak typeof(self) weakSelf = self;
-    id toast = NJSponsorBlockCreateHintToast(
-        _playerContext,
-        @"已记录起点",
-        detail,
-        @"终点提交",
-        @"取消",
-        ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-            [strongSelf finishSubmissionDraft];
-        },
-        ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-            [strongSelf cancelSubmissionDraft];
-        },
-        nil,
-        300.0,  // Effectively indefinite (5 min)
-        NO
-    );
-    if (toast) {
-        [_playerContext.toastWidgetService presentCustomToast:toast];
-    }
-}
-
-- (void)finishSubmissionDraft {
-    if (!self.submissionDraftInProgress) return;
-
-    NSTimeInterval currentTime = self.currentPlaybackTime;
-    if (currentTime < 0 || !isfinite(currentTime)) {
-        [_playerContext.toastWidgetService showToastContainerWithText:@"无法提交, 无法获取当前播放时间"];
-        return;
-    }
-
-    if (![self.videoID isEqualToString:self.submissionDraftVideoID] || self.cid != self.submissionDraftCID) {
-        [self cancelSubmissionDraft];
-        [_playerContext.toastWidgetService showToastContainerWithText:@"已取消提交, 当前视频已切换，请重新记录片段"];
-        return;
-    }
-
-    NSTimeInterval duration = self.submissionDraftVideoDuration;
-    if (duration <= 0 || !isfinite(duration)) {
-        [_playerContext.toastWidgetService showToastContainerWithText:@"无法提交，暂未获取视频时长，稍后再试"];
-        return;
-    }
-
-    NSTimeInterval rawStart = self.submissionDraftStartTime;
-    NSTimeInterval start = round((MIN(rawStart, currentTime) + DBL_EPSILON) * 1000.0) / 1000.0;
-    NSTimeInterval end   = round((MAX(rawStart, currentTime) + DBL_EPSILON) * 1000.0) / 1000.0;
-    if (end > duration) end = duration;
-
-    NSString *category   = self.submissionDraftCategory;
-    NSTimeInterval minDuration = [category isEqualToString:@"poi_highlight"] ? 0 : MAX([NJSponsorBlockSettings minDuration], 0.5);
-    if (end - start < minDuration) {
-        [_playerContext.toastWidgetService showToastContainerWithText:
-            [NSString stringWithFormat:@"片段太短, 至少需要 %@", NJSBFormatCompact(minDuration)]];
-        return;
-    }
-
-
-    NSString *actionType = [category isEqualToString:@"poi_highlight"] ? @"poi" : @"skip";
-
-    NJSponsorBlockSegment *localSegment = [self addUnsubmittedSegmentWithCategory:category
-                                                                       actionType:actionType
-                                                                          segment:@[@(start), @(end)]];
-    // Clear draft state
-    self.submissionDraftInProgress    = NO;
-    self.submissionDraftCategory      = nil;
-    self.submissionDraftVideoID       = nil;
-    self.submissionDraftCID           = 0;
-    self.submissionDraftVideoDuration = 0;
-    self.submissionDraftStartTime     = 0;
-
-    if (!localSegment) {
-        [_playerContext.toastWidgetService showToastContainerWithText:@"保存失败, 无法保存本地未提交片段"];
-        return;
-    }
-    
-
-    [_playerContext.toastWidgetService showToastContainerWithText:@"已保存草稿, 可在提交菜单中提交或管理"];
-}
-
-- (void)showInfoToast:(NSString *)title detail:(NSString *)detail {
-    if (!_playerContext) return;
-    id toast = NJSponsorBlockCreateHintToast(_playerContext, title, detail, nil, nil, nil, nil, nil, 3.0, NO);
-    if (toast) [_playerContext.toastWidgetService presentCustomToast:toast];
-}
-
-- (void)submitCurrentVideoDraftsShowingToasts {
-    if (self.isSubmissionInFlight) return;
-    self.isSubmissionInFlight = YES;
+- (void)submissionControllerDidChangeState:(NJSponsorBlockSubmissionController *)controller {
     [self postStateChangedNotification];
-
-    [_playerContext.toastWidgetService showToastContainerWithText:@"正在提交, 请稍候"];
-
-
-    __weak typeof(self) weakSelf = self;
-    [self submitUnsubmittedSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-
-            strongSelf.isSubmissionInFlight = NO;
-            [strongSelf postStateChangedNotification];
-            NSString *title = success ? @"提交成功" : @"提交失败";
-            NSString *detail = success ? @"当前视频草稿已提交" : (error.localizedDescription ?: @"请稍后重试");
-            id resultToast = NJSponsorBlockCreateHintToast(strongSelf->_playerContext, title, detail, nil, nil, nil, nil, nil, 3.0, NO);
-            if (resultToast) [strongSelf->_playerContext.toastWidgetService presentCustomToast:resultToast];
-        });
-    }];
 }
 
-- (void)cancelSubmissionDraft {
-    self.submissionDraftInProgress    = NO;
-    self.submissionDraftCategory      = nil;
-    self.submissionDraftVideoID       = nil;
-    self.submissionDraftCID           = 0;
-    self.submissionDraftVideoDuration = 0;
-    self.submissionDraftStartTime     = 0;
+- (void)submissionController:(NJSponsorBlockSubmissionController *)controller
+    didRemoveUnsubmittedSegments:(NSArray<NJSponsorBlockSegment *> *)segments {
+    [self clearSkipStateForSegments:segments];
+    [self postStateChangedNotification];
+}
+
+- (void)submissionController:(NJSponsorBlockSubmissionController *)controller
+    didCompleteServerSubmissionForVideoID:(NSString *)videoID
+                                      cid:(NSInteger)cid
+                                 segments:(NSArray<NJSponsorBlockSegment *> *)segments {
+    [self clearSkipStateForSegments:segments];
+    [self invalidateCachedSegmentsForVideoID:videoID cid:cid];
+    self.segments = @[];
+    [self postStateChangedNotification];
+    [self loadSegmentsForCurrentVideoIfNeeded];
 }
 
 - (void)dealloc {
@@ -990,6 +663,7 @@ static NSString *NJSBFormatCompact(NSTimeInterval time) {
     self.skippedUUIDs = [NSMutableSet set];
     self.actualSkippedUUIDs = [NSMutableSet set];
     self.service = [[NJSponsorBlockService alloc] init];
+    self.submissionController = [[NJSponsorBlockSubmissionController alloc] initWithService:self.service delegate:self];
     self.cooldownUntil = [NSDate distantPast];
     self.lastProbeLogTime = -100;
     self.trackedCacheKeys = [NSMutableSet set];

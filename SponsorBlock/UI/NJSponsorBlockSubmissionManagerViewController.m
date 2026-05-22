@@ -258,7 +258,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
     self.submissionInFlight = YES;
     [self.tableView reloadData];
     __weak typeof(self) weakSelf = self;
-    [manager submitUnsubmittedSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
+    [manager.submissionController submitSegmentsForCurrentVideoWithCompletion:^(BOOL success, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) {
@@ -286,7 +286,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
         NSInteger cid = [self cidFromKey:key];
         NJSponsorBlockManager *manager = _manager;
         if ([manager.videoID isEqualToString:videoID] && manager.cid == cid) {
-            [manager clearUnsubmittedSegmentsForCurrentVideo];
+            [manager.submissionController clearSegmentsForCurrentVideo];
         } else {
             [[NJSponsorBlockUnsubmittedSegmentStore sharedStore] removeSegmentsForVideoID:videoID cid:cid];
             [self postDraftsChangedNotification];
@@ -307,7 +307,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [alert addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
-        [self.manager clearAllUnsubmittedSegments];
+        [self.manager.submissionController clearAllSegments];
         [self reloadDrafts];
         [self.tableView reloadData];
     }]];
