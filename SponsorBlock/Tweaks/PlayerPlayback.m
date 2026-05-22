@@ -13,19 +13,16 @@ static void hook_BBPlayerPlayback_setCurrentItem(BBPlayerPlayback* self, SEL _cm
     id currentItem = [self currentItem];
     orig_BBPlayerPlayback_setCurrentItem(self, _cmd, newItem);
     // 有的时候会复用播放器，导致使用同一个BBPlayerContext，因此加入-[BBPlayerPlayback setCurrentItem:]的hook，在切换视频切复用播放器时可以及时更新manager的状态，
-    // currentItem=nil代表首次进入此播放界面，由BBPlayerContext的hook处理
-    if(!currentItem) {
-        return;
-    }
     
     BBPlayerContext* context = [self context];
     NJSponsorBlockManager* manager = objc_getAssociatedObject(context, sponsorBlockManagerKey);
     if(!manager) {
-        NJSponsorBlockManager* manager = [[NJSponsorBlockManager alloc] initWithContext:[self context]];
+        manager = [[NJSponsorBlockManager alloc] initWithContext:[self context]];
         objc_setAssociatedObject([self context], sponsorBlockManagerKey, manager, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    } else {
+    } else if (currentItem) {
         [manager reset];
     }
+    [manager startListeningForVideoInfoWithCID:[newItem cid]];
 }
 
 

@@ -15,6 +15,7 @@ BOOL JRSwizzleInstanceMethod(Class targetClass, SEL selector, IMP newIMP, IMP *o
 void swizzle(Class clazz, SEL originalAction, SEL swizzledAction);
 
 extern void* sponsorBlockManagerKey;
+extern NSMutableDictionary* cachedCidVideoInfoDict;
 
 @interface BBPlayerControlContainerWidgetView : UIView
 @end
@@ -51,7 +52,9 @@ extern void* sponsorBlockManagerKey;
 
 @end
 
-
+@interface BBPlayerPlayItem: NSObject
+-(NSInteger)cid;
+@end
 
 @interface BBPlayerWidget : BBPlayerObject
 @property UIView* view;

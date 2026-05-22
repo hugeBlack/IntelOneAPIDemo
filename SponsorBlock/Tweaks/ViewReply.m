@@ -8,6 +8,7 @@
 #include "../Settings/NJSettingDefine.h"
 #include "../Services/NJSponsorBlockManager.h"
 
+NSMutableDictionary* cachedCidVideoInfoDict = nil;
 
 @interface ViewReplyHelper : NSObject
 
@@ -319,7 +320,8 @@
         @"cid": cid,
         @"duration": @([self videoDurationInObject:json])
     };
-    [NSNotificationCenter.defaultCenter postNotificationName:NJSponsorBlockVideoInfoRetrievedNotification object:self userInfo:userInfo];
+    cachedCidVideoInfoDict[cid] = userInfo;
+    [NSNotificationCenter.defaultCenter postNotificationName:NJSponsorBlockVideoInfoRetrievedNotification object:self];
 }
 
 - (void)inspectModelObject:(id)object source:(NSString *)source {
@@ -353,7 +355,8 @@
         @"cid": cid,
         @"duration": @(duration)
     };
-    [NSNotificationCenter.defaultCenter postNotificationName:NJSponsorBlockVideoInfoRetrievedNotification object:self userInfo:userInfo];
+    cachedCidVideoInfoDict[cid] = userInfo;
+    [NSNotificationCenter.defaultCenter postNotificationName:NJSponsorBlockVideoInfoRetrievedNotification object:self];
 }
 
 - (BOOL)shouldInspectResponse:(NSURLResponse *)response data:(NSData *)data {
@@ -410,6 +413,7 @@ id hook_BAPIAppViewV1ViewReply_initWithData_extensionRegistry_error(id self, SEL
 //}
 
 void initViewReplyHooks(void) {
+    cachedCidVideoInfoDict = [NSMutableDictionary new];
     //    JRSwizzleInstanceMethod(objc_getClass("BBVDPlayerVC"), @selector(play:),
     //                            (IMP)hook_BBVDPlayerVC_play,
     //                            (IMP*)&orig_BBVDPlayerVC_play);

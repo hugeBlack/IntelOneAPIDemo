@@ -284,7 +284,7 @@ static NSString * const NJSponsorBlockSubmissionCellID = @"NJSponsorBlockSubmiss
     [alert addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(__unused UIAlertAction *action) {
         NSString *videoID = [self videoIDFromKey:key];
         NSInteger cid = [self cidFromKey:key];
-        NJSponsorBlockManager *manager = _manager;
+        NJSponsorBlockManager *manager = self->_manager;
         if ([manager.videoID isEqualToString:videoID] && manager.cid == cid) {
             [manager.submissionController clearSegmentsForCurrentVideo];
         } else {

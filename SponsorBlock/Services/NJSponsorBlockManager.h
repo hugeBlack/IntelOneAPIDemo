@@ -32,7 +32,7 @@ FOUNDATION_EXPORT NSNotificationName const NJSponsorBlockVideoInfoRetrievedNotif
 
 - (instancetype)initWithContext:(BBPlayerContext*)playerContext;
 
-- (void)updateVideoID:(NSString *)videoID cid:(NSInteger)cid;
+- (void)startListeningForVideoInfoWithCID:(NSInteger)cid;
 
 - (NSArray<NJSponsorBlockSegment *> *)allSegments;
 - (NSArray<NJSponsorBlockSegment *> *)displaySegments;

@@ -11,6 +11,7 @@
 #import "NJSponsorBlockUnsubmittedSegmentStore.h"
 #import "../Settings/NJCommonDefine.h"
 #import "../Tweaks/RuntimeClasses/SponsorBlockHintToast.h"
+#import "../Tweaks/Tweaks.h"
 #import <math.h>
 #import <objc/runtime.h>
 #import "NJSponsorBlockSubmissionController.h"
@@ -66,7 +67,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 @property (nonatomic, strong) NSDate *cooldownUntil;
 @property (nonatomic, strong) NJSponsorBlockSegment *lastSkippedSegment;
 @property (nonatomic, assign) NSTimeInterval lastProbeLogTime;
-@property (nonatomic, assign) NSTimeInterval currentPlaybackTime;
 @property (nonatomic, assign) NSTimeInterval nativeVideoDuration;
 @property (nonatomic, copy) NSString *loadedServerBaseURLString;
 @property (nonatomic, strong) NSMutableSet<NSString *> *trackedCacheKeys;
@@ -79,7 +79,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 // Advance-notice dedup: UUID of the segment for which we already showed the toast
 @property (nonatomic, copy) NSString *advanceNoticeShownForSegmentUUID;
 
-- (void)updateNativeVideoDuration:(NSTimeInterval)duration;
+- (void)updateVideoID:(NSString *)videoID cid:(NSInteger)cid duration:(NSTimeInterval)duration;
 
 - (void)invalidateCachedSegmentsForVideoID:(NSString *)videoID cid:(NSInteger)cid;
 - (NSUInteger)estimatedSizeForSegments:(NSArray<NJSponsorBlockSegment *> *)segments;
@@ -106,17 +106,35 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
                                                  name:NJSponsorBlockSettingsDidChangeNotification
                                                object:nil];
     [self reset];
-    
-    __weak typeof(self) weakSelf = self;
-    _playbackPollTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(__unused NSTimer *timer) {
-        NSTimeInterval time = weakSelf.playerContext.playback.currentTime;
-        [weakSelf handlePlaybackTime:time];
-    }];
-    
     return self;
 }
 
-- (void)updateVideoID:(NSString *)videoID cid:(NSInteger)cid {
+- (void)startListeningForVideoInfoWithCID:(NSInteger)cid {
+    self.cid = cid;
+
+    NSDictionary* videoInfo = cachedCidVideoInfoDict[@(cid)];
+    if(videoInfo) {
+        [self handleVideoInfoRetrieved:nil];
+    } else {
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleVideoInfoRetrieved:) name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
+    }
+    
+}
+
+- (void)handleVideoInfoRetrieved:(NSNotification*)notification {
+    @synchronized (cachedCidVideoInfoDict) {
+        NSDictionary* videoInfo = cachedCidVideoInfoDict[@(self.cid)];
+        if(videoInfo) {
+            NSString *videoID = videoInfo[@"videoID"];
+            NSNumber *cid = videoInfo[@"cid"];
+            NSNumber *duration = videoInfo[@"duration"];
+            [self updateVideoID:videoID cid:cid.integerValue duration:duration.longLongValue];
+            [NSNotificationCenter.defaultCenter removeObserver:self name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
+        }
+    }
+}
+
+- (void)updateVideoID:(NSString *)videoID cid:(NSInteger)cid duration:(NSTimeInterval)duration {
     if (videoID.length == 0 || cid <= 0) {
         return;
     }
@@ -124,11 +142,18 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
         return;
     }
     
+    if (duration <= 0 || !isfinite(duration)) {
+        return;
+    }
+    if (fabs(self.nativeVideoDuration - duration) < 0.5) {
+        return;
+    }
+
     self.videoID = videoID;
     self.cid = cid;
     self.segments = @[];
     self.loadedServerBaseURLString = @"";
-    self.nativeVideoDuration = 0;
+    self.nativeVideoDuration = duration;
     self.lastSkippedSegment = nil;
     self.advanceNoticeShownForSegmentUUID = nil;
     [self.skippedUUIDs removeAllObjects];
@@ -138,11 +163,19 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     [self loadSegmentsForCurrentVideoIfNeeded];
 }
 
-- (NSArray<NJSponsorBlockSegment *> *)allSegments {
-    if (![NJSponsorBlockSettings enabled]) {
-        return @[];
-    }
+- (void)startPollingPlaybackTime {
+    if(_playbackPollTimer && [_playbackPollTimer isValid]) return;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        __weak typeof(self) weakSelf = self;
+        self->_playbackPollTimer = [NSTimer scheduledTimerWithTimeInterval:0.5 repeats:YES block:^(__unused NSTimer *timer) {
+            NSTimeInterval time = weakSelf.playerContext.playback.currentTime;
+            [weakSelf handlePlaybackTime:time];
+        }];
+    });
 
+}
+
+- (NSArray<NJSponsorBlockSegment *> *)allSegments {
     NSArray<NJSponsorBlockSegment *> *localSegments = [self.submissionController segmentsForCurrentVideo];
     if (self.segments.count == 0) {
         return localSegments;
@@ -237,11 +270,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 }
 
 - (void)handlePlaybackTimeForProbe:(NSTimeInterval)time {
-    if (![NJSponsorBlockSettings enabled]) {
-        return;
-    }
-
-    self.currentPlaybackTime = time;
     [self postPlaybackTimeChangedNotification];
 
     if (time - self.lastProbeLogTime >= 5.0 || time < self.lastProbeLogTime) {
@@ -309,17 +337,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     self.cooldownUntil = [NSDate dateWithTimeIntervalSinceNow:NJSponsorBlockCooldown];
 }
 
-- (void)updateNativeVideoDuration:(NSTimeInterval)duration {
-    if (duration <= 0 || !isfinite(duration)) {
-        return;
-    }
-    if (fabs(self.nativeVideoDuration - duration) < 0.5) {
-        return;
-    }
-    self.nativeVideoDuration = duration;
-    [self postStateChangedNotification];
-}
-
 - (NSTimeInterval)estimatedVideoDuration {
     NSTimeInterval duration = self.nativeVideoDuration;
     for (NJSponsorBlockSegment *segment in [self allSegments]) {
@@ -330,7 +347,7 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 }
 
 - (void)loadSegmentsForCurrentVideoIfNeeded {
-    if (![NJSponsorBlockSettings enabled] || self.videoID.length == 0 || self.cid <= 0) {
+    if (self.videoID.length == 0 || self.cid <= 0) {
         return;
     }
 
@@ -340,6 +357,9 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
         self.segments = cachedSegments;
         self.loadedServerBaseURLString = serverBaseURLString;
         [self postStateChangedNotification];
+        if([cachedSegments count] > 0) {
+            [self startPollingPlaybackTime];
+        }
         return;
     }
 
@@ -361,6 +381,9 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
             strongSelf.loadedServerBaseURLString = serverBaseURLString;
             [strongSelf saveSegments:segments videoID:videoID cid:cid];
             [strongSelf postStateChangedNotification];
+            if([segments count] > 0) {
+                [strongSelf startPollingPlaybackTime];
+            }
             NSLog(@"[NJSponsorBlock] loaded %lu segments for %@:%ld", (unsigned long)segments.count, videoID, (long)cid);
         });
     }];
@@ -463,16 +486,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     }
 }
 
-- (void)handleVideoInfoRetrieved:(NSNotification*)notification {
-    NSDictionary* info = [notification userInfo];
-    NSString *videoID = info[@"videoID"];
-    NSNumber *cid = info[@"cid"];
-    NSNumber *duration = info[@"duration"];
-    [self updateVideoID:videoID cid:cid.integerValue];
-    [self updateNativeVideoDuration:duration.longLongValue];
-    [NSNotificationCenter.defaultCenter removeObserver:self name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
-}
-
 - (void)postStateChangedNotification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:NJSponsorBlockStateDidChangeNotification object:self];
@@ -546,6 +559,10 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 
 - (void)seekTo:(NSTimeInterval)dest {
     [_playerContext.playback seekTo:dest];
+}
+
+- (NSTimeInterval)currentPlaybackTime {
+    return self.playerContext.playback.currentTime;
 }
 
 // ── Toast trigger methods ─────────────────────────────────────────────────
@@ -632,12 +649,18 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
 
 - (void)submissionControllerDidChangeState:(NJSponsorBlockSubmissionController *)controller {
     [self postStateChangedNotification];
+    if([self.segments count] > 0) {
+        [self startPollingPlaybackTime];
+    }
 }
 
 - (void)submissionController:(NJSponsorBlockSubmissionController *)controller
     didRemoveUnsubmittedSegments:(NSArray<NJSponsorBlockSegment *> *)segments {
     [self clearSkipStateForSegments:segments];
     [self postStateChangedNotification];
+    if([self.segments count] > 0) {
+        [self startPollingPlaybackTime];
+    }
 }
 
 - (void)submissionController:(NJSponsorBlockSubmissionController *)controller
@@ -667,7 +690,6 @@ static NSTimeInterval const NJSponsorBlockCooldown = 1.0;
     self.cooldownUntil = [NSDate distantPast];
     self.lastProbeLogTime = -100;
     self.trackedCacheKeys = [NSMutableSet set];
-    [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(handleVideoInfoRetrieved:) name:NJSponsorBlockVideoInfoRetrievedNotification object:nil];
     [self postStateChangedNotification];
 }
 
