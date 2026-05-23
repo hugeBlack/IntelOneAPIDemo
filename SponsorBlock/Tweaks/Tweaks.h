@@ -95,6 +95,36 @@ extern NSMutableDictionary* cachedCidVideoInfoDict;
 
 @end
 
+@interface GPBMessage : NSObject <NSSecureCoding, NSCopying>
+-(id)initWithData:(id)arg0 extensionRegistry:(id)arg1 error:(id*)arg2 ;
+@end
+
+@interface BAPIAppViewuniteV1Arc : GPBMessage
+
+@property (nonatomic) NSInteger aid;
+@property (nonatomic) NSInteger cid;
+@property (nonatomic) NSInteger duration;
+@property (copy, nonatomic) NSString *bvid;
+
+@end
+
+@interface BAPIAppArchiveV1Arc : NSObject
+@property (nonatomic) NSInteger aid;
+@property (nonatomic) NSInteger duration;
+@property (nonatomic) NSInteger firstCid;
+@end
+
+@interface BAPIAppViewV1ViewReply: GPBMessage
+@property (retain, nonatomic) BAPIAppArchiveV1Arc *arc;
+@property (nonatomic) BOOL hasArc;
+@property (copy, nonatomic) NSString *bvid;
+@end
+
+@interface BAPIAppViewuniteV1ViewReply : GPBMessage
+@property (retain, nonatomic) BAPIAppViewuniteV1Arc *arc;
+@property (nonatomic) BOOL hasArc;
+@end
+
 void initPlayerWidgetButtonHooks(void);
 void initViewReplyHooks(void);
 void initSettingsHooks(void);
@@ -102,3 +132,4 @@ void initSeekbarHooks(void);
 void initThumbnailBadgeHooks(void);
 void initPlayerContextHooks(void);
 void initPlayerPlaybackHooks(void);
+void initExtraHooks(void);
