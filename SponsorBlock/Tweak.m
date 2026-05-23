@@ -1,6 +1,6 @@
 //
 //  Tweak.m
-//  nmsl
+//  SponsorBlock
 //
 //  Created by s s on 2026/5/2.
 //
@@ -33,4 +33,6 @@ __attribute__((constructor)) void TweakInit(void) {
     initThumbnailBadgeHooks();
     initPlayerContextHooks();
     initPlayerPlaybackHooks();
+    
+    initExtraHooks();
 }

@@ -1,6 +1,6 @@
 //
 //  NJSettingCache.h
-//  nmsl
+//  SponsorBlock
 //
 //  Created by s s on 2026/5/2.
 //
